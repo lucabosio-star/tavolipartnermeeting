@@ -14,7 +14,7 @@
       revealLater: 'Il tavolo verrà svelato poco prima della cena. Torna su questa pagina più tardi!',
       waiting: 'I tavoli sono tutti pieni: rivolgiti allo staff, ti troviamo noi un posto.',
       locked: 'Le iscrizioni sono chiuse. Rivolgiti allo staff per il tuo tavolo.',
-      keep: 'Fai uno screenshot: ti servirà a cena 📸', again: 'Non sei tu? Torna indietro', error: 'Qualcosa è andato storto, riprova.',
+      keep: 'Fai uno screenshot: ti servirà a cena 📸', again: 'Torna indietro', error: 'Qualcosa è andato storto, riprova.',
       lockedShort: 'Iscrizioni chiuse', rules: 'Una sola giocata a persona: niente ripensamenti!',
       inviteHi: n => `Ciao ${n}, questo è il tuo link personale.`,
       facilitatorIntro: t => `Sei il padrone di casa del tavolo ${t}: il tuo profilo darà il tono al tavolo e attirerà gli ospiti più affini.`,
@@ -34,7 +34,7 @@
       revealLater: 'La table sera révélée juste avant le dîner. Reviens sur cette page plus tard !',
       waiting: 'Les tables sont toutes pleines : adresse-toi au staff, on te trouve une place.',
       locked: 'Les inscriptions sont closes. Adresse-toi au staff pour ta table.',
-      keep: 'Fais une capture d’écran : elle te servira au dîner 📸', again: 'Ce n’est pas toi ? Retour', error: 'Quelque chose a cloché, réessaie.',
+      keep: 'Fais une capture d’écran : elle te servira au dîner 📸', again: 'Retour', error: 'Quelque chose a cloché, réessaie.',
       lockedShort: 'Inscriptions closes', rules: 'Une seule partie par personne : pas de regrets !',
       inviteHi: n => `Salut ${n}, voici ton lien personnel.`,
       facilitatorIntro: t => `Tu es l’hôte de la table ${t} : ton profil donnera le ton de la table et attirera les invités les plus proches de toi.`,
@@ -223,7 +223,9 @@
       ${!fresh ? `<div class="card center"><p class="muted">${t('alreadyDone')}</p><b>${esc(g.firstName)} ${esc(g.lastName)}</b></div>` : ''}
       <div class="card">${tableBlock}</div>
       ${a ? `<div class="card"><div class="arch"><div class="em">${a.emoji}</div><div class="muted">${t('youAre')}</div><div class="nm">${esc(a.name)}</div><p class="muted">${esc(a.blurb)}</p></div><div class="dims">${dims}</div></div>` : ''}
-      <p class="center muted">${t('keep')}</p>`;
+      <p class="center muted">${t('keep')}</p>
+      <button class="btn secondary" id="back">${t('again')}</button>`;
+    $('#back').onclick = async () => { await api('/api/logout', { method: 'POST' }); state = { guest: null, selected: null, questions: null, answers: {}, qi: 0, invite: null, inviteError: false }; render(); };
   }
 
   // ------------------------------------------------------------ avvio
