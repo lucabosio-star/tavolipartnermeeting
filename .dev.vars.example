@@ -1,0 +1,2 @@
+ADMIN_PASSWORD=cambiami
+SESSION_SECRET=una-stringa-lunga-e-casuale

@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tavoli-partner-meeting",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "none"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tavoli-db",
+      "database_id": "b9360fcb-050b-4dfb-95f0-1487c92fdc76",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "EVENT_NAME": "Danfoss Partner Meeting"
+  },
+  "observability": { "enabled": true }
+}

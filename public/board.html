@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Tabellone tavoli</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body class="board">
+<div class="wrap">
+  <h1 id="title">I tavoli di stasera</h1>
+  <div class="grid" id="grid"></div>
+</div>
+<script>
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+async function load() {
+  const r = await fetch('/api/admin/state', { credentials: 'same-origin' });
+  if (r.status === 401) { location.href = '/admin?next=/board'; return; }
+  const s = await r.json();
+  const byTable = new Map(s.tables.map(t => [t.id, []]));
+  for (const g of s.guests) if (g.tableId != null) byTable.get(g.tableId)?.push(g);
+  document.getElementById('grid').innerHTML = s.tables.map(t => {
+    const list = (byTable.get(t.id) || []).sort((a, b) => (b.facilitatorTableId === t.id) - (a.facilitatorTableId === t.id) || a.lastName.localeCompare(b.lastName));
+    return `<div class="tcard"><h3><span><span class="num">${t.id}</span>${esc(t.name)}</span><span class="cap">${list.length}/${t.capacity}</span></h3>
+      <ul>${list.map(g => `<li class="${g.facilitatorTableId === t.id ? 'fac' : ''}"><span>${esc(g.firstName)} ${esc(g.lastName)}</span><span class="co">${esc(g.company)}</span></li>`).join('')}</ul></div>`;
+  }).join('');
+}
+load(); setInterval(load, 15000);
+</script>
+</body>
+</html>
