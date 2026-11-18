@@ -134,3 +134,12 @@ body.board { background: #fff; }
 .board .tcard li { font-size: 15px; padding: 6px 0; }
 .board .tcard h3 { font-size: 18px; font-weight: 400; }
 .board .tcard h3 .num { color: var(--red); font-size: 34px; font-weight: 300; margin-right: 10px; }
+
+/* ricerca facilitatore in Setup */
+.facsearch { position: relative; display: block; min-width: 220px; }
+.facsearch input { width: 100%; }
+.sugg { position: absolute; left: 0; right: 0; top: 100%; background: #fff; border: 1px solid var(--g2); border-top: 0; z-index: 5; max-height: 260px; overflow: auto; box-shadow: 0 8px 20px rgba(0,0,0,.08); }
+.sugg-item { padding: 8px 10px; cursor: pointer; border-top: 1px solid var(--g3); font-size: 13px; }
+.sugg-item:hover { background: var(--g4); color: var(--red); }
+.facname { font-size: 13px; }
+.facell { min-width: 240px; }
