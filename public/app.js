@@ -223,9 +223,7 @@
       ${!fresh ? `<div class="card center"><p class="muted">${t('alreadyDone')}</p><b>${esc(g.firstName)} ${esc(g.lastName)}</b></div>` : ''}
       <div class="card">${tableBlock}</div>
       ${a ? `<div class="card"><div class="arch"><div class="em">${a.emoji}</div><div class="muted">${t('youAre')}</div><div class="nm">${esc(a.name)}</div><p class="muted">${esc(a.blurb)}</p></div><div class="dims">${dims}</div></div>` : ''}
-      <p class="center muted">${t('keep')}</p>
-      <button class="btn secondary" id="back">${t('again')}</button>`;
-    $('#back').onclick = async () => { await api('/api/logout', { method: 'POST' }); state = { guest: null, selected: null, questions: null, answers: {}, qi: 0 }; render(); };
+      <p class="center muted">${t('keep')}</p>`;
   }
 
   // ------------------------------------------------------------ avvio

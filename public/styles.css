@@ -59,13 +59,13 @@ details.terms summary { cursor: pointer; color: var(--ink); font-weight: 600; }
 .progress { display: flex; gap: 6px; margin-bottom: 16px; }
 .progress i { flex: 1; height: 3px; background: var(--g3); }
 .progress i.on { background: var(--red); }
-.q { font-size: 30px; font-weight: 300; margin: 4px 0 18px; line-height: 1.12; letter-spacing: -.01em; }
-.opts { display: grid; gap: 8px; }
-.opt { display: flex; align-items: center; gap: 14px; padding: 13px 14px; border-radius: var(--radius); border: 1px solid var(--g2); background: #fff; font-size: 16px; cursor: pointer; text-align: left; font-family: inherit; color: var(--ink); transition: transform .08s, border-color .15s, background .15s; }
+.q { font-size: 28px; font-weight: 300; margin: 4px 0 18px; line-height: 1.12; letter-spacing: -.01em; }
+.opts { display: grid; gap: 7px; }
+.opt { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: var(--radius); border: 1px solid var(--g2); background: #fff; font-size: 16px; cursor: pointer; text-align: left; font-family: inherit; color: var(--ink); transition: transform .08s, border-color .15s, background .15s; }
 .opt:hover { border-color: var(--g1); }
 .opt:active { transform: scale(.985); }
 .opt.sel { border-color: var(--red); background: #fff3f4; }
-.opt .em { font-size: 26px; width: 34px; text-align: center; flex: none; }
+.opt .em { font-size: 24px; width: 32px; text-align: center; flex: none; }
 
 /* ---- slot machine ---- */
 .slot { display: flex; justify-content: center; gap: 10px; margin: 24px 0; }
