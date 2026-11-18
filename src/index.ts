@@ -21,7 +21,7 @@ interface GuestRow {
   id: number; first_name: string; last_name: string; company: string; department: string; group_key: string; gender: string;
   facilitator_table_id: number | null; consent_at: string | null; device_token: string | null; locale: string | null;
   quiz_question_ids: string | null; answers: string | null; vector: string | null; archetype: string | null;
-  table_id: number | null; assigned_at: string | null; assigned_by: string | null; created_at: string;
+  table_id: number | null; assigned_at: string | null; assigned_by: string | null; created_at: string; invite_token: string | null;
 }
 interface TableRow { id: number; name: string; capacity: number; seed_vector: string | null }
 
@@ -86,6 +86,7 @@ function guestView(g: GuestRow, tables: Map<number, TableRow>, settings: Record<
     id: g.id, firstName: g.first_name, lastName: g.last_name, company: g.company,
     consent: !!g.consent_at, done, locked: settings.locked === '1',
     isFacilitator: g.facilitator_table_id != null,
+    facilitatorTable: g.facilitator_table_id != null ? { id: g.facilitator_table_id, name: tables.get(g.facilitator_table_id)?.name ?? '' } : null,
     archetype: done && g.archetype ? describeArchetype(g.archetype, locale) : null,
     vector: done ? parseJson<number[]>(g.vector, []) : null,
     dimensions: DIMENSIONS.map(d => ({ key: d.key, low: d.low[locale], high: d.high[locale] })),
@@ -127,16 +128,33 @@ app.get('/api/me', async c => {
   return c.json({ guest: guestView(g, new Map(t.results.map(r => [r.id, r])), s, locale) });
 });
 
-/** L'utente sceglie il proprio nome e accetta l'informativa. */
+/** Link personale: chi lo apre vede il proprio nome già selezionato. */
+app.get('/api/invite/:token', async c => {
+  const token = c.req.param('token');
+  if (!/^[a-f0-9]{16,64}$/.test(token)) return c.json({ error: 'not_found' }, 404);
+  const g = await c.env.DB.prepare('SELECT * FROM guests WHERE invite_token = ?').bind(token).first<GuestRow>();
+  if (!g) return c.json({ error: 'not_found' }, 404);
+  const t = g.facilitator_table_id != null ? await c.env.DB.prepare('SELECT id, name FROM tables WHERE id = ?').bind(g.facilitator_table_id).first<TableRow>() : null;
+  return c.json({ guest: { id: g.id, firstName: g.first_name, lastName: g.last_name, company: g.company, done: !!g.vector,
+    facilitatorTable: t ? { id: t.id, name: t.name } : null } });
+});
+
+/** L'utente sceglie il proprio nome (o arriva da un link personale) e accetta l'informativa. */
 app.post('/api/claim', async c => {
-  const body = await c.req.json<{ guestId?: number; consent?: boolean; locale?: string }>().catch(() => ({} as any));
-  const id = Number(body.guestId);
-  if (!Number.isInteger(id)) return c.json({ error: 'bad_request' }, 400);
+  const body = await c.req.json<{ guestId?: number; inviteToken?: string; consent?: boolean; locale?: string }>().catch(() => ({} as any));
   if (body.consent !== true) return c.json({ error: 'consent_required' }, 400);
   const locale = pickLocale(c, body.locale);
   const db = c.env.DB;
-  let g = await db.prepare('SELECT * FROM guests WHERE id = ?').bind(id).first<GuestRow>();
+  let g: GuestRow | null = null;
+  if (typeof body.inviteToken === 'string' && /^[a-f0-9]{16,64}$/.test(body.inviteToken)) {
+    g = await db.prepare('SELECT * FROM guests WHERE invite_token = ?').bind(body.inviteToken).first<GuestRow>();
+  } else {
+    const id = Number(body.guestId);
+    if (!Number.isInteger(id)) return c.json({ error: 'bad_request' }, 400);
+    g = await db.prepare('SELECT * FROM guests WHERE id = ?').bind(id).first<GuestRow>();
+  }
   if (!g) return c.json({ error: 'not_found' }, 404);
+  const id = g.id;
   if (!g.device_token) {
     // Primo accesso: creiamo il token. L'UPDATE condizionale evita che due telefoni creino due token.
     const tok = randomToken();
@@ -266,7 +284,7 @@ admin.get('/state', async c => {
     id: x.id, firstName: x.first_name, lastName: x.last_name, company: x.company, department: x.department, groupKey: x.group_key, gender: x.gender,
     facilitatorTableId: x.facilitator_table_id, consent: !!x.consent_at, started: !!x.quiz_question_ids, done: !!x.vector,
     vector: parseJson<number[] | null>(x.vector, null), archetype: x.archetype ? describeArchetype(x.archetype, 'it').name : null,
-    tableId: x.table_id, assignedAt: x.assigned_at, assignedBy: x.assigned_by, locale: x.locale,
+    tableId: x.table_id, assignedAt: x.assigned_at, assignedBy: x.assigned_by, locale: x.locale, inviteToken: x.invite_token,
   }));
   return c.json({
     settings: s,
@@ -396,12 +414,13 @@ admin.post('/guests/import', async c => {
     if (id) {
       updated++;
       stmts.push(db.prepare(`UPDATE guests SET company=?, department=?, group_key=?, gender=CASE WHEN ?<>'' THEN ? ELSE gender END,
-                             facilitator_table_id=COALESCE(?, facilitator_table_id) WHERE id=?`)
-        .bind(company, department, gk, gender, gender, tid, id));
+                             facilitator_table_id=COALESCE(?, facilitator_table_id),
+                             invite_token=CASE WHEN ? IS NOT NULL THEN COALESCE(invite_token, ?) ELSE invite_token END WHERE id=?`)
+        .bind(company, department, gk, gender, gender, tid, tid, randomToken(), id));
     } else {
       inserted++;
-      stmts.push(db.prepare(`INSERT INTO guests (first_name, last_name, company, department, group_key, gender, facilitator_table_id) VALUES (?,?,?,?,?,?,?)`)
-        .bind(r.first_name.trim(), r.last_name.trim(), company, department, gk, gender, tid));
+      stmts.push(db.prepare(`INSERT INTO guests (first_name, last_name, company, department, group_key, gender, facilitator_table_id, invite_token) VALUES (?,?,?,?,?,?,?,?)`)
+        .bind(r.first_name.trim(), r.last_name.trim(), company, department, gk, gender, tid, tid != null ? randomToken() : null));
     }
   }
   for (let i = 0; i < stmts.length; i += 50) await db.batch(stmts.slice(i, i + 50));
@@ -489,7 +508,7 @@ admin.post('/guests/:id/facilitator', async c => {
     const tid = Number(b.tableId);
     if (!(await db.prepare('SELECT id FROM tables WHERE id = ?').bind(tid).first())) return c.json({ error: 'table_not_found' }, 404);
     stmts.push(db.prepare('UPDATE guests SET facilitator_table_id = NULL WHERE facilitator_table_id = ? AND id <> ?').bind(tid, id));
-    stmts.push(db.prepare('UPDATE guests SET facilitator_table_id = ? WHERE id = ?').bind(tid, id));
+    stmts.push(db.prepare('UPDATE guests SET facilitator_table_id = ?, invite_token = COALESCE(invite_token, ?) WHERE id = ?').bind(tid, randomToken(), id));
     if (g.vector) {
       stmts.push(db.prepare("UPDATE guests SET table_id = ?, assigned_at = datetime('now'), assigned_by = 'facilitator' WHERE id = ?").bind(tid, id));
       stmts.push(db.prepare('UPDATE tables SET seed_vector = ? WHERE id = ?').bind(g.vector, tid));
@@ -498,6 +517,16 @@ admin.post('/guests/:id/facilitator', async c => {
   await db.batch(stmts);
   await log(db, 'admin_facilitator', id, { tableId: b.tableId });
   return c.json({ ok: true });
+});
+
+/** Genera (o rigenera con force) il link personale di una persona. */
+admin.post('/guests/:id/invite', async c => {
+  const id = Number(c.req.param('id'));
+  const b = await c.req.json<{ force?: boolean }>().catch(() => ({} as any));
+  const tok = randomToken();
+  await c.env.DB.prepare(b.force ? 'UPDATE guests SET invite_token = ? WHERE id = ?' : 'UPDATE guests SET invite_token = COALESCE(invite_token, ?) WHERE id = ?').bind(tok, id).run();
+  const g = await c.env.DB.prepare('SELECT invite_token FROM guests WHERE id = ?').bind(id).first<{ invite_token: string }>();
+  return c.json({ inviteToken: g?.invite_token });
 });
 
 /** Ricalcolo globale: facilitatori fissi, tutti gli altri ridistribuiti per affinità. */

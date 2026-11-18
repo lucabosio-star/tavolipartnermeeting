@@ -61,7 +61,8 @@ npm run loadtest                     # in un altro terminale: ATTENZIONE, azzera
 2. **Setup → Invitati**: importa il CSV `nome;cognome;azienda;dipartimento;genere;tavolo` (pronto in `data/invitati.csv`).
    Il genere (M/F) serve al bilanciamento ed è modificabile in admin.
    La colonna `tavolo` indica il numero del tavolo di cui la persona è **facilitatore**.
-3. Chiedi ai **facilitatori di giocare per primi**: il loro profilo diventa il "seme" del tavolo e attira gli ospiti affini.
+3. In **Setup → Tavoli** scegli il facilitatore di ogni tavolo e copia il suo **link personale** (`/?invite=…`): inviaglielo via email
+   prima dell'evento. Aprendolo salta la ricerca del nome e fa subito il test; il suo profilo diventa il "seme" del tavolo.
 4. Stampa il QR code con l'URL dell'app. Gli ospiti giocano, l'admin segue in **Tavoli live** o sul **Tabellone**.
 5. Opzionale, prima della cena: **Ricalcola tutte le assegnazioni** per ottimizzare l'affinità (facilitatori fissi).
 6. Spunta **Iscrizioni chiuse** quando vuoi congelare le assegnazioni. **Export CSV** per i segnaposto.

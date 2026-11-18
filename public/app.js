@@ -16,6 +16,10 @@
       locked: 'Le iscrizioni sono chiuse. Rivolgiti allo staff per il tuo tavolo.',
       keep: 'Fai uno screenshot: ti servirà a cena 📸', again: 'Non sei tu? Torna indietro', error: 'Qualcosa è andato storto, riprova.',
       lockedShort: 'Iscrizioni chiuse', rules: 'Una sola giocata a persona: niente ripensamenti!',
+      inviteHi: n => `Ciao ${n}, questo è il tuo link personale.`,
+      facilitatorIntro: t => `Sei il padrone di casa del tavolo ${t}: il tuo profilo darà il tono al tavolo e attirerà gli ospiti più affini.`,
+      facilitatorBadge: t => `Padrone di casa del tavolo ${t}`,
+      inviteInvalid: 'Questo link non è valido o è scaduto. Cerca il tuo nome qui sotto.',
     },
     fr: {
       title: 'Trouve ta table', intro: 'Quatre questions, zéro prise de tête. On te dit qui tu es (à peu près) et où tu t’assois ce soir.',
@@ -32,6 +36,10 @@
       locked: 'Les inscriptions sont closes. Adresse-toi au staff pour ta table.',
       keep: 'Fais une capture d’écran : elle te servira au dîner 📸', again: 'Ce n’est pas toi ? Retour', error: 'Quelque chose a cloché, réessaie.',
       lockedShort: 'Inscriptions closes', rules: 'Une seule partie par personne : pas de regrets !',
+      inviteHi: n => `Salut ${n}, voici ton lien personnel.`,
+      facilitatorIntro: t => `Tu es l’hôte de la table ${t} : ton profil donnera le ton de la table et attirera les invités les plus proches de toi.`,
+      facilitatorBadge: t => `Hôte de la table ${t}`,
+      inviteInvalid: 'Ce lien n’est pas valide ou a expiré. Cherche ton nom ci-dessous.',
     },
   };
 
@@ -48,7 +56,7 @@
   };
 
   let config = { eventName: '', locked: false };
-  let state = { guest: null, selected: null, questions: null, answers: {}, qi: 0 };
+  let state = { guest: null, selected: null, questions: null, answers: {}, qi: 0, invite: null, inviteError: false };
 
   function setLang(l) {
     lang = l; localStorage.setItem('lang', l); document.documentElement.lang = l;
@@ -71,14 +79,18 @@
   function renderLoading() { app.innerHTML = `<div class="card center"><div class="spinner"></div><p class="muted">${t('loading')}</p></div>`; }
 
   function renderSearch() {
+    const inv = state.invite;
     app.innerHTML = `
       <div class="card">
         <h1>${t('title')}</h1>
         <p class="muted">${t('intro')}</p>
-        ${config.locked ? `<p class="err">${t('locked')}</p>` : ''}
-        <input type="search" id="q" placeholder="${t('search')}" autocomplete="off" autocapitalize="words" ${state.selected ? `value="${esc(state.selected.firstName + ' ' + state.selected.lastName)}"` : ''}>
+        ${config.locked && !inv ? `<p class="err">${t('locked')}</p>` : ''}
+        ${state.inviteError ? `<p class="err">${t('inviteInvalid')}</p>` : ''}
+        ${inv ? `<p><b>${t('inviteHi')(esc(inv.firstName))}</b></p>${inv.facilitatorTable ? `<p class="muted">${t('facilitatorIntro')(inv.facilitatorTable.id)}</p>` : ''}
+                 <input type="text" value="${esc(inv.firstName + ' ' + inv.lastName)}" disabled>`
+              : `<input type="search" id="q" placeholder="${t('search')}" autocomplete="off" autocapitalize="words" ${state.selected ? `value="${esc(state.selected.firstName + ' ' + state.selected.lastName)}"` : ''}>`}
         <div class="results" id="res"></div>
-        <div id="consentBox" class="${state.selected ? '' : 'hidden'}">
+        <div id="consentBox" class="${state.selected || inv ? '' : 'hidden'}">
           <details class="terms"><summary>${t('termsTitle')}</summary><p>${t('terms')}</p></details>
           <label class="consent"><input type="checkbox" id="consent"><span>${t('consentLabel')}</span></label>
           <p class="muted">${t('rules')}</p>
@@ -88,7 +100,7 @@
       </div>`;
     const q = $('#q'), res = $('#res'), go = $('#go'), consent = $('#consent');
     let timer;
-    q.oninput = () => {
+    if (q) q.oninput = () => {
       state.selected = null; $('#consentBox').classList.add('hidden');
       clearTimeout(timer);
       const v = q.value.trim();
@@ -109,12 +121,12 @@
     go.onclick = async () => {
       go.disabled = true; $('#err').textContent = '';
       try {
-        const r = await api('/api/claim', { method: 'POST', body: { guestId: state.selected.id, consent: true, locale: lang } });
+        const r = await api('/api/claim', { method: 'POST', body: inv ? { inviteToken: inv.token, consent: true, locale: lang } : { guestId: state.selected.id, consent: true, locale: lang } });
         state.guest = r.guest; state.questions = null; state.answers = {}; state.qi = 0;
         render();
       } catch (e) { $('#err').textContent = t('error'); go.disabled = false; }
     };
-    if (!state.selected) setTimeout(() => q.focus(), 50);
+    if (!state.selected && q) setTimeout(() => q.focus(), 50);
   }
 
   async function startQuiz() {
@@ -205,7 +217,7 @@
       return `<div class="dim"><div class="lbl"><span>${esc(d.low)}</span><span>${esc(d.high)}</span></div><div class="bar"><b style="left:${pct}%"></b></div></div>`;
     }).join('');
     const tableBlock = g.table
-      ? `<div class="big-table"><div class="muted">${t('yourTable')}</div><div class="n">${g.table.id}</div>${g.table.name ? `<div class="name">${esc(g.table.name)}</div>` : ''}</div>`
+      ? `<div class="big-table"><div class="muted">${t('yourTable')}</div><div class="n">${g.table.id}</div>${g.table.name ? `<div class="name">${esc(g.table.name)}</div>` : ''}${g.facilitatorTable ? `<p class="muted" style="margin-top:8px">★ ${t('facilitatorBadge')(g.facilitatorTable.id)}</p>` : ''}</div>`
       : g.revealLater ? `<p class="center">${t('revealLater')}</p>`
       : g.waitingTable ? `<p class="err center">${t('waiting')}</p>` : '';
     app.innerHTML = `
@@ -224,6 +236,16 @@
       config = cfg; if (!localStorage.getItem('lang') && cfg.locale) lang = cfg.locale;
       $('#brand').textContent = cfg.eventName || 'Partner Meeting';
       state.guest = me.guest;
+      const token = new URLSearchParams(location.search).get('invite');
+      if (token) {
+        try {
+          const inv = await api('/api/invite/' + encodeURIComponent(token));
+          // Se sul telefono c'è già un'altra identità, il link personale ha la precedenza.
+          if (state.guest && state.guest.id !== inv.guest.id) { await api('/api/logout', { method: 'POST' }); state.guest = null; }
+          if (!state.guest) state.invite = { ...inv.guest, token };
+        } catch (e) { state.inviteError = true; }
+        history.replaceState(null, '', location.pathname);
+      }
     } catch (e) { /* offline: mostriamo comunque la ricerca */ }
     setLang(lang);
   })();

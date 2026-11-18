@@ -12,6 +12,8 @@
     return data;
   };
 
+  const inviteUrl = tok => `${location.origin}/?invite=${tok}`;
+  const copy = async txt => { try { await navigator.clipboard.writeText(txt); toast('Link copiato'); } catch { prompt('Copia il link:', txt); } };
   let S = null; let tab = localStorage.getItem('adminTab') || 'tavoli'; let filter = ''; let timer;
 
   async function refresh(silent) {
@@ -98,9 +100,9 @@
         <td style="font-size:11px">${esc(g.archetype || '')}</td>
         <td><select data-move="${g.id}">${tableOptions(g.tableId)}</select></td>
         <td><select data-fac="${g.id}">${tableOptions(g.facilitatorTableId)}</select></td>
-        <td style="white-space:nowrap"><button class="btn small secondary" data-reset="${g.id}" title="Azzera quiz e tavolo">↺</button> <button class="btn small secondary" data-del="${g.id}" title="Elimina">🗑</button></td>
+        <td style="white-space:nowrap"><button class="btn small secondary" data-link="${g.id}" data-tok="${g.inviteToken || ''}" title="Copia link personale">🔗</button> <button class="btn small secondary" data-reset="${g.id}" title="Azzera quiz e tavolo">↺</button> <button class="btn small secondary" data-del="${g.id}" title="Elimina">🗑</button></td>
       </tr>`).join('')}</tbody></table></div>
-      <p class="muted">${list.length} persone. ★ = facilitatore. ↺ azzera il quiz (la persona potrà rigiocare).</p>`;
+      <p class="muted">${list.length} persone. 🔗 copia il link personale (salta la ricerca del nome), ↺ azzera il quiz (la persona potrà rigiocare).</p>`;
     $('#f').oninput = e => { filter = e.target.value; renderGuests(); $('#f').focus(); $('#f').setSelectionRange(filter.length, filter.length); };
     $('#add').onclick = async () => {
       try { await api('/api/admin/guests', { method: 'POST', body: { firstName: $('#nf').value, lastName: $('#nl').value, company: $('#nc').value, department: $('#nd').value, gender: $('#ng').value } }); toast('Aggiunto'); await refresh(); }
@@ -111,6 +113,11 @@
     p.querySelectorAll('select[data-gender]').forEach(s => s.onchange = async () => { await api(`/api/admin/guests/${s.dataset.gender}`, { method: 'PATCH', body: { gender: s.value } }); toast('Genere aggiornato'); await refresh(true); });
     p.querySelectorAll('input[data-dept]').forEach(i => i.onchange = async () => { await api(`/api/admin/guests/${i.dataset.dept}`, { method: 'PATCH', body: { department: i.value } }); toast('Dipartimento aggiornato'); await refresh(true); });
     p.querySelectorAll('select[data-fac]').forEach(s => s.onchange = async () => { try { await api(`/api/admin/guests/${s.dataset.fac}/facilitator`, { method: 'POST', body: { tableId: s.value ? Number(s.value) : null } }); toast('Facilitatore aggiornato'); await refresh(); } catch (e) { toast('Errore: ' + e.message); } });
+    p.querySelectorAll('button[data-link]').forEach(b => b.onclick = async () => {
+      let tok = b.dataset.tok;
+      if (!tok) { tok = (await api(`/api/admin/guests/${b.dataset.link}/invite`, { method: 'POST', body: {} })).inviteToken; await refresh(true); }
+      copy(inviteUrl(tok));
+    });
     p.querySelectorAll('button[data-reset]').forEach(b => b.onclick = async () => { if (!confirm('Azzerare quiz e tavolo di questa persona?')) return; await api(`/api/admin/guests/${b.dataset.reset}/reset`, { method: 'POST' }); toast('Azzerato'); await refresh(); });
     p.querySelectorAll('button[data-del]').forEach(b => b.onclick = async () => { if (!confirm('Eliminare questa persona?')) return; await api(`/api/admin/guests/${b.dataset.del}`, { method: 'DELETE' }); toast('Eliminato'); await refresh(); });
   }
@@ -119,10 +126,14 @@
     $('#panel').innerHTML = `
       <div class="card"><h2>1. Tavoli</h2>
         <div class="row">Crea <input type="number" id="genN" min="1" max="99" value="${S.tables.length || 12}" style="width:70px"> tavoli da <input type="number" id="genC" min="1" max="50" value="${S.settings.default_capacity || 10}" style="width:70px"> posti <button class="btn small" id="gen">Genera mancanti</button></div>
-        <table class="list"><thead><tr><th>N.</th><th>Nome (tema del tavolo, solo backend)</th><th>Posti</th><th></th></tr></thead><tbody id="tbody">
-          ${S.tables.map(t => `<tr><td>${t.id}</td><td><input type="text" data-name="${t.id}" value="${esc(t.name)}" style="width:100%"></td><td><input type="number" data-cap="${t.id}" value="${t.capacity}" min="1" max="50" style="width:70px"></td><td><button class="btn small secondary" data-rm="${t.id}">🗑</button></td></tr>`).join('')}
+        <table class="list"><thead><tr><th>N.</th><th>Nome (tema del tavolo)</th><th>Posti</th><th>Facilitatore</th><th>Link personale per il test</th><th></th></tr></thead><tbody id="tbody">
+          ${S.tables.map(t => { const fac = S.guests.find(g => g.facilitatorTableId === t.id); return `<tr><td>${t.id}</td><td><input type="text" data-name="${t.id}" value="${esc(t.name)}" style="width:100%"></td><td><input type="number" data-cap="${t.id}" value="${t.capacity}" min="1" max="50" style="width:70px"></td>
+            <td><select data-facsel="${t.id}"><option value="">— nessuno —</option>${S.guests.map(g => `<option value="${g.id}" ${fac && fac.id === g.id ? 'selected' : ''}>${esc(g.lastName)} ${esc(g.firstName)} (${esc(g.company)})</option>`).join('')}</select></td>
+            <td>${fac && fac.inviteToken ? `<button class="btn small secondary" data-copy="${fac.inviteToken}">📋 Copia link</button> <span class="muted">${fac.done ? '✓ test fatto' : 'test non ancora fatto'}</span>` : '<span class="muted">—</span>'}</td>
+            <td><button class="btn small secondary" data-rm="${t.id}">🗑</button></td></tr>`; }).join('')}
         </tbody></table>
-        <p></p><button class="btn small" id="saveTables">Salva tavoli</button> <span class="muted">Un tavolo si elimina solo se vuoto; la capienza non può scendere sotto gli occupanti.</span></div>
+        <p></p><button class="btn small" id="saveTables">Salva nomi e posti</button> <button class="btn small secondary" id="copyAll">📋 Copia tutti i link</button> <span class="muted">Un tavolo si elimina solo se vuoto; la capienza non può scendere sotto gli occupanti. Il facilitatore si salva subito alla selezione.</span>
+        <p class="muted">Invia a ogni facilitatore il suo link personale via email: aprendolo salta la ricerca del nome e fa subito il test. Il suo profilo diventa il "seme" del tavolo, quindi è bene che lo faccia prima degli ospiti.</p></div>
 
       <div class="card"><h2>2. Invitati (CSV)</h2>
         <p class="muted">Colonne riconosciute (intestazione obbligatoria, separatore ; o ,): <code>nome; cognome; azienda; dipartimento; genere; tavolo</code>. “genere” = M o F (serve per il bilanciamento), “tavolo” = numero del tavolo di cui la persona è facilitatore (vuoto per gli altri). Per Danfoss il dipartimento è usato come gruppo da distribuire. Reimportando lo stesso file le persone già presenti vengono aggiornate, non duplicate.</p>
@@ -145,6 +156,20 @@
       await saveTables(tables);
     };
     $('#saveTables').onclick = () => saveTables(S.tables.map(t => ({ id: t.id, name: p.querySelector(`[data-name="${t.id}"]`).value, capacity: Number(p.querySelector(`[data-cap="${t.id}"]`).value) })));
+    p.querySelectorAll('select[data-facsel]').forEach(sel => sel.onchange = async () => {
+      const tid = Number(sel.dataset.facsel);
+      const prev = S.guests.find(g => g.facilitatorTableId === tid);
+      try {
+        if (sel.value) await api(`/api/admin/guests/${sel.value}/facilitator`, { method: 'POST', body: { tableId: tid } });
+        else if (prev) await api(`/api/admin/guests/${prev.id}/facilitator`, { method: 'POST', body: { tableId: null } });
+        toast('Facilitatore aggiornato'); await refresh();
+      } catch (e) { toast('Errore: ' + (e.data?.error || e.message)); }
+    });
+    p.querySelectorAll('button[data-copy]').forEach(b => b.onclick = () => copy(inviteUrl(b.dataset.copy)));
+    $('#copyAll').onclick = () => {
+      const lines = S.tables.map(t => { const f = S.guests.find(g => g.facilitatorTableId === t.id); return f && f.inviteToken ? `Tavolo ${t.id} ${t.name} - ${f.firstName} ${f.lastName} - ${inviteUrl(f.inviteToken)}` : `Tavolo ${t.id} ${t.name} - (nessun facilitatore)`; });
+      copy(lines.join('\n'));
+    };
     p.querySelectorAll('button[data-rm]').forEach(b => b.onclick = () => { if (confirm(`Eliminare il tavolo ${b.dataset.rm}?`)) saveTables(S.tables.filter(t => t.id !== Number(b.dataset.rm)).map(t => ({ id: t.id, name: t.name, capacity: t.capacity }))); });
     $('#csvFile').onchange = e => { const f = e.target.files[0]; if (f) f.text().then(t => $('#csv').value = t); };
     const imp = async mode => {
