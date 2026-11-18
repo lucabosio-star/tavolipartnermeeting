@@ -58,7 +58,8 @@ npm run loadtest                     # in un altro terminale: ATTENZIONE, azzera
 ## Flusso operativo per l'evento
 
 1. **Setup → Tavoli**: genera i tavoli (numero e posti) e dai a ciascuno un nome/tema (visibile anche all'ospite sotto il numero).
-2. **Setup → Invitati**: importa il CSV `nome;cognome;azienda;dipartimento;tavolo`.
+2. **Setup → Invitati**: importa il CSV `nome;cognome;azienda;dipartimento;genere;tavolo` (pronto in `data/invitati.csv`).
+   Il genere (M/F) serve al bilanciamento ed è modificabile in admin.
    La colonna `tavolo` indica il numero del tavolo di cui la persona è **facilitatore**.
 3. Chiedi ai **facilitatori di giocare per primi**: il loro profilo diventa il "seme" del tavolo e attira gli ospiti affini.
 4. Stampa il QR code con l'URL dell'app. Gli ospiti giocano, l'admin segue in **Tavoli live** o sul **Tabellone**.
@@ -75,6 +76,16 @@ npm run loadtest                     # in un altro terminale: ATTENZIONE, azzera
 - Nessuno può rigiocare; solo l'admin può azzerare una persona (↺) o spostarla.
 - Se tutti i tavoli sono pieni la persona vede "rivolgiti allo staff" e appare in alto nel pannello admin come "in attesa".
 - Con iscrizioni chiuse nessuna nuova assegnazione viene accettata.
+
+## Regole di assegnazione
+
+Ogni tavolo con posti liberi riceve un costo; vince il più basso:
+
+- **affinità**: distanza dal profilo del tavolo (il facilitatore, altrimenti la media degli occupanti);
+- **stessa azienda / dipartimento**: penalità crescente, molto forte oltre la soglia (default 2 per tavolo);
+- **genere**: penalità se al tavolo ci sarebbero più persone di quel genere di quante ne prevede la quota globale,
+  così la minoranza viene distribuita su tutti i tavoli (disattivabile in Setup → Regole);
+- **riempimento**: leggera preferenza per i tavoli meno pieni.
 
 ## Il quiz
 

@@ -3,7 +3,7 @@ import type { Context } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { makeAdminToken, verifyAdminToken, timingSafeEqual, randomToken } from './auth';
 import { DIMENSIONS, pickQuestionIds, serializeQuestions, scoreAnswers, archetypeKey, describeArchetype, type Locale } from './quiz';
-import { rankTables, rebalance, DEFAULT_WEIGHTS, type TableState, type Weights } from './assign';
+import { rankTables, rebalance, genderShares, DEFAULT_WEIGHTS, type TableState, type Weights } from './assign';
 
 export interface Env {
   DB: D1Database;
@@ -18,7 +18,7 @@ const app = new Hono<App>();
 
 // ---------------------------------------------------------------- tipi DB
 interface GuestRow {
-  id: number; first_name: string; last_name: string; company: string; department: string; group_key: string;
+  id: number; first_name: string; last_name: string; company: string; department: string; group_key: string; gender: string;
   facilitator_table_id: number | null; consent_at: string | null; device_token: string | null; locale: string | null;
   quiz_question_ids: string | null; answers: string | null; vector: string | null; archetype: string | null;
   table_id: number | null; assigned_at: string | null; assigned_by: string | null; created_at: string;
@@ -33,9 +33,22 @@ async function getSettings(db: D1Database): Promise<Record<string, string>> {
   return Object.fromEntries(results.map(r => [r.key, r.value]));
 }
 
-function weightsFrom(settings: Record<string, string>): Weights {
-  return { ...DEFAULT_WEIGHTS, maxSameGroup: Math.max(1, Number(settings.max_same_group) || 2) };
+async function weightsFrom(db: D1Database, settings: Record<string, string>): Promise<Weights> {
+  const { results } = await db.prepare('SELECT gender FROM guests').all<{ gender: string }>();
+  return {
+    ...DEFAULT_WEIGHTS,
+    maxSameGroup: Math.max(1, Number(settings.max_same_group) || 2),
+    gender: settings.gender_balance === '0' ? 0 : DEFAULT_WEIGHTS.gender,
+    genderShare: genderShares(results.map(r => r.gender)),
+  };
 }
+
+const normGender = (v: unknown): string => {
+  const s = String(v ?? '').trim().toLowerCase();
+  if (['m', 'uomo', 'maschio', 'male', 'homme', 'h'].includes(s)) return 'M';
+  if (['f', 'donna', 'femmina', 'female', 'femme', 'w'].includes(s)) return 'F';
+  return '';
+};
 
 function pickLocale(c: Context<App>, explicit?: unknown): Locale {
   if (explicit === 'fr' || explicit === 'it') return explicit;
@@ -54,13 +67,13 @@ async function log(db: D1Database, kind: string, guestId: number | null, detail?
 async function loadTableStates(db: D1Database): Promise<{ rows: TableRow[]; states: TableState[] }> {
   const [t, g] = await db.batch([
     db.prepare('SELECT id, name, capacity, seed_vector FROM tables ORDER BY id'),
-    db.prepare('SELECT table_id, vector, group_key FROM guests WHERE table_id IS NOT NULL'),
+    db.prepare('SELECT table_id, vector, group_key, gender FROM guests WHERE table_id IS NOT NULL'),
   ]);
   const rows = t.results as unknown as TableRow[];
   const states: TableState[] = rows.map(r => ({ id: r.id, capacity: r.capacity, seed: parseJson<number[] | null>(r.seed_vector, null), occupants: [] }));
   const byId = new Map(states.map(s => [s.id, s]));
-  for (const o of g.results as unknown as { table_id: number; vector: string | null; group_key: string }[]) {
-    byId.get(o.table_id)?.occupants.push({ vector: parseJson<number[] | null>(o.vector, null), group: o.group_key });
+  for (const o of g.results as unknown as { table_id: number; vector: string | null; group_key: string; gender: string }[]) {
+    byId.get(o.table_id)?.occupants.push({ vector: parseJson<number[] | null>(o.vector, null), group: o.group_key, gender: o.gender });
   }
   return { rows, states };
 }
@@ -179,7 +192,7 @@ app.post('/api/quiz/submit', async c => {
   let vector: number[];
   try { vector = scoreAnswers(ids, body.answers || {}); } catch { return c.json({ error: 'invalid_answers' }, 400); }
   const arch = archetypeKey(vector);
-  const w = weightsFrom(settings);
+  const w = await weightsFrom(db, settings);
   const vecJson = JSON.stringify(vector), ansJson = JSON.stringify(body.answers);
 
   // --- Facilitatore: va al suo tavolo e ne diventa il seme. Non è soggetto al limite posti.
@@ -199,7 +212,7 @@ app.post('/api/quiz/submit', async c => {
   //     assegna solo se la persona è ancora libera E il tavolo ha ancora posto.
   for (let attempt = 0; attempt < 6; attempt++) {
     const { states } = await loadTableStates(db);
-    const ranked = rankTables(states, { vector, group: g.group_key }, w);
+    const ranked = rankTables(states, { vector, group: g.group_key, gender: g.gender }, w);
     if (!ranked.length) break;
     for (const tid of ranked.slice(0, 3)) {
       const r = await db.prepare(
@@ -250,7 +263,7 @@ admin.get('/state', async c => {
     db.prepare('SELECT * FROM guests ORDER BY last_name, first_name').all<GuestRow>(),
   ]);
   const guests = g.results.map(x => ({
-    id: x.id, firstName: x.first_name, lastName: x.last_name, company: x.company, department: x.department, groupKey: x.group_key,
+    id: x.id, firstName: x.first_name, lastName: x.last_name, company: x.company, department: x.department, groupKey: x.group_key, gender: x.gender,
     facilitatorTableId: x.facilitator_table_id, consent: !!x.consent_at, started: !!x.quiz_question_ids, done: !!x.vector,
     vector: parseJson<number[] | null>(x.vector, null), archetype: x.archetype ? describeArchetype(x.archetype, 'it').name : null,
     tableId: x.table_id, assignedAt: x.assigned_at, assignedBy: x.assigned_by, locale: x.locale,
@@ -261,7 +274,8 @@ admin.get('/state', async c => {
     guests,
     dimensions: DIMENSIONS.map(d => ({ key: d.key, low: d.low.it, high: d.high.it })),
     stats: { guests: guests.length, consented: guests.filter(x => x.consent).length, done: guests.filter(x => x.done).length,
-             seated: guests.filter(x => x.tableId != null).length, waiting: guests.filter(x => x.done && x.tableId == null).length },
+             seated: guests.filter(x => x.tableId != null).length, waiting: guests.filter(x => x.done && x.tableId == null).length,
+             genders: Object.fromEntries(['M', 'F', ''].map(k => [k || 'nd', guests.filter(x => x.gender === k).length])) },
   });
 });
 
@@ -270,6 +284,7 @@ admin.put('/settings', async c => {
   const allowed: Record<string, (v: unknown) => string | null> = {
     locked: v => (v === true || v === '1' || v === 1 ? '1' : '0'),
     reveal: v => (v === false || v === '0' || v === 0 ? '0' : '1'),
+    gender_balance: v => (v === false || v === '0' || v === 0 ? '0' : '1'),
     max_same_group: v => { const n = Number(v); return Number.isInteger(n) && n >= 1 && n <= 20 ? String(n) : null; },
     default_capacity: v => { const n = Number(v); return Number.isInteger(n) && n >= 1 && n <= 50 ? String(n) : null; },
   };
@@ -338,6 +353,7 @@ function parseCsv(text: string): Record<string, string>[] {
     azienda: 'company', company: 'company', societe: 'company', societa: 'company', partner: 'company',
     dipartimento: 'department', department: 'department', reparto: 'department', dept: 'department', funzione: 'department',
     tavolo: 'table', table: 'table', facilitatore: 'table', facilitator: 'table',
+    genere: 'gender', gender: 'gender', sesso: 'gender', sexe: 'gender', sex: 'gender',
   };
   const header = split(lines[0]).map(h => aliases[norm(h)] ?? norm(h));
   return lines.slice(1).map(split).map(cells => Object.fromEntries(header.map((h, i) => [h, cells[i] ?? ''])));
@@ -373,17 +389,19 @@ admin.post('/guests/import', async c => {
     if (seen.has(key)) { skipped++; continue; } seen.add(key);
     const company = (r.company || '').trim(), department = (r.department || '').trim();
     const gk = groupKeyFor(company, department);
+    const gender = normGender(r.gender);
     let tid: number | null = null;
     if (r.table && r.table.trim()) { const n = Number(r.table); if (Number.isInteger(n) && tables.has(n)) tid = n; else unknownTables.push(n); }
     const id = byName.get(key);
     if (id) {
       updated++;
-      stmts.push(db.prepare(`UPDATE guests SET company=?, department=?, group_key=?, facilitator_table_id=COALESCE(?, facilitator_table_id) WHERE id=?`)
-        .bind(company, department, gk, tid, id));
+      stmts.push(db.prepare(`UPDATE guests SET company=?, department=?, group_key=?, gender=CASE WHEN ?<>'' THEN ? ELSE gender END,
+                             facilitator_table_id=COALESCE(?, facilitator_table_id) WHERE id=?`)
+        .bind(company, department, gk, gender, gender, tid, id));
     } else {
       inserted++;
-      stmts.push(db.prepare(`INSERT INTO guests (first_name, last_name, company, department, group_key, facilitator_table_id) VALUES (?,?,?,?,?,?)`)
-        .bind(r.first_name.trim(), r.last_name.trim(), company, department, gk, tid));
+      stmts.push(db.prepare(`INSERT INTO guests (first_name, last_name, company, department, group_key, gender, facilitator_table_id) VALUES (?,?,?,?,?,?,?)`)
+        .bind(r.first_name.trim(), r.last_name.trim(), company, department, gk, gender, tid));
     }
   }
   for (let i = 0; i < stmts.length; i += 50) await db.batch(stmts.slice(i, i + 50));
@@ -392,12 +410,26 @@ admin.post('/guests/import', async c => {
 });
 
 admin.post('/guests', async c => {
-  const b = await c.req.json<{ firstName?: string; lastName?: string; company?: string; department?: string }>().catch(() => ({} as any));
+  const b = await c.req.json<{ firstName?: string; lastName?: string; company?: string; department?: string; gender?: string }>().catch(() => ({} as any));
   if (!b.firstName?.trim() || !b.lastName?.trim()) return c.json({ error: 'name_required' }, 400);
   const company = (b.company || '').trim(), department = (b.department || '').trim();
-  const r = await c.env.DB.prepare('INSERT INTO guests (first_name, last_name, company, department, group_key) VALUES (?,?,?,?,?)')
-    .bind(b.firstName.trim(), b.lastName.trim(), company, department, groupKeyFor(company, department)).run();
+  const r = await c.env.DB.prepare('INSERT INTO guests (first_name, last_name, company, department, group_key, gender) VALUES (?,?,?,?,?,?)')
+    .bind(b.firstName.trim(), b.lastName.trim(), company, department, groupKeyFor(company, department), normGender(b.gender)).run();
   return c.json({ id: r.meta.last_row_id });
+});
+
+/** Modifica anagrafica (azienda, dipartimento, genere). */
+admin.patch('/guests/:id', async c => {
+  const id = Number(c.req.param('id'));
+  const b = await c.req.json<{ company?: string; department?: string; gender?: string }>().catch(() => ({} as any));
+  const g = await c.env.DB.prepare('SELECT * FROM guests WHERE id = ?').bind(id).first<GuestRow>();
+  if (!g) return c.json({ error: 'not_found' }, 404);
+  const company = b.company !== undefined ? String(b.company).trim() : g.company;
+  const department = b.department !== undefined ? String(b.department).trim() : g.department;
+  const gender = b.gender !== undefined ? normGender(b.gender) : g.gender;
+  await c.env.DB.prepare('UPDATE guests SET company=?, department=?, group_key=?, gender=? WHERE id=?')
+    .bind(company, department, groupKeyFor(company, department), gender, id).run();
+  return c.json({ ok: true });
 });
 
 admin.delete('/guests/:id', async c => {
@@ -476,10 +508,10 @@ admin.post('/rebalance', async c => {
   const g = await db.prepare('SELECT * FROM guests WHERE vector IS NOT NULL').all<GuestRow>();
   const tables = t.results.map(r => ({ id: r.id, capacity: r.capacity, seed: parseJson<number[] | null>(r.seed_vector, null) }));
   const fixed = g.results.filter(x => x.facilitator_table_id != null && x.table_id != null)
-    .map(x => ({ guestId: x.id, tableId: x.table_id!, vector: parseJson<number[] | null>(x.vector, null), group: x.group_key }));
+    .map(x => ({ guestId: x.id, tableId: x.table_id!, vector: parseJson<number[] | null>(x.vector, null), group: x.group_key, gender: x.gender }));
   const movable = g.results.filter(x => !(x.facilitator_table_id != null && x.table_id != null))
-    .map(x => ({ guestId: x.id, vector: parseJson<number[]>(x.vector, []), group: x.group_key }));
-  const plan = rebalance(tables, fixed, movable, weightsFrom(s));
+    .map(x => ({ guestId: x.id, vector: parseJson<number[]>(x.vector, []), group: x.group_key, gender: x.gender }));
+  const plan = rebalance(tables, fixed, movable, await weightsFrom(db, s));
   const stmts = movable.map(m => plan.has(m.guestId)
     ? db.prepare("UPDATE guests SET table_id=?, assigned_at=datetime('now'), assigned_by='rebalance' WHERE id=?").bind(plan.get(m.guestId), m.guestId)
     : db.prepare('UPDATE guests SET table_id=NULL WHERE id=?').bind(m.guestId));
@@ -491,11 +523,11 @@ admin.post('/rebalance', async c => {
 admin.get('/export.csv', async c => {
   const g = await c.env.DB.prepare(`SELECT g.*, t.name AS table_name FROM guests g LEFT JOIN tables t ON t.id = g.table_id ORDER BY g.table_id, g.last_name`).all<GuestRow & { table_name: string | null }>();
   const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const head = ['tavolo', 'nome_tavolo', 'cognome', 'nome', 'azienda', 'dipartimento', 'facilitatore_di', 'archetipo', 'energia', 'gusto', 'social', 'metodo', 'assegnato_il', 'assegnato_da'];
+  const head = ['tavolo', 'nome_tavolo', 'cognome', 'nome', 'azienda', 'dipartimento', 'genere', 'facilitatore_di', 'archetipo', 'energia', 'gusto', 'social', 'metodo', 'assegnato_il', 'assegnato_da'];
   const lines = [head.join(';')];
   for (const x of g.results) {
     const v = parseJson<number[]>(x.vector, []);
-    lines.push([x.table_id, x.table_name, x.last_name, x.first_name, x.company, x.department, x.facilitator_table_id,
+    lines.push([x.table_id, x.table_name, x.last_name, x.first_name, x.company, x.department, x.gender, x.facilitator_table_id,
       x.archetype ? describeArchetype(x.archetype, 'it').name : '', v[0], v[1], v[2], v[3], x.assigned_at, x.assigned_by].map(esc).join(';'));
   }
   return new Response('﻿' + lines.join('\r\n'), { headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="tavoli.csv"' } });

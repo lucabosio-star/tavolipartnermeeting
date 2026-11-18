@@ -37,7 +37,7 @@
   function render() {
     if (!S) return renderLogin();
     const st = S.stats;
-    $('#sub').textContent = `${st.seated} seduti · ${st.done} quiz fatti · ${st.consented} accessi · ${st.guests} invitati` + (st.waiting ? ` · ⚠️ ${st.waiting} in attesa di posto` : '');
+    $('#sub').textContent = `${st.seated} seduti · ${st.done} quiz fatti · ${st.consented} accessi · ${st.guests} invitati (${st.genders.M} M, ${st.genders.F} F${st.genders.nd ? `, ${st.genders.nd} n.d.` : ''})` + (st.waiting ? ` · ⚠️ ${st.waiting} in attesa di posto` : '');
     $('#topActions').innerHTML = `
       <label class="muted" style="font-size:13px"><input type="checkbox" id="locked" ${S.settings.locked === '1' ? 'checked' : ''}> Iscrizioni chiuse</label>
       <label class="muted" style="font-size:13px"><input type="checkbox" id="reveal" ${S.settings.reveal !== '0' ? 'checked' : ''}> Mostra tavolo subito</label>
@@ -67,7 +67,8 @@
       <div class="grid">${S.tables.map(t => {
         const list = (byTable.get(t.id) || []).sort((a, b) => (b.facilitatorTableId === t.id) - (a.facilitatorTableId === t.id) || a.lastName.localeCompare(b.lastName));
         const full = list.length >= t.capacity;
-        return `<div class="tcard"><h3><span>${t.id} · ${esc(t.name)}</span><span class="cap ${full ? 'full' : ''}">${list.length}/${t.capacity}</span></h3>
+        const nF = list.filter(g => g.gender === 'F').length, nM = list.filter(g => g.gender === 'M').length;
+        return `<div class="tcard"><h3><span>${t.id} · ${esc(t.name)}</span><span class="cap ${full ? 'full' : ''}" title="${nM} uomini, ${nF} donne">${list.length}/${t.capacity} <small>(${nM}M ${nF}F)</small></span></h3>
           ${t.seed ? `<div class="muted" style="font-size:11px;margin-bottom:4px">Profilo: ${dimLbl(t.seed)}</div>` : '<div class="muted" style="font-size:11px;margin-bottom:4px">Facilitatore non ancora giocato</div>'}
           <ul>${list.map(g => `<li class="${g.facilitatorTableId === t.id ? 'fac' : ''}" title="${esc(g.archetype || '')}"><span>${g.facilitatorTableId === t.id ? '★ ' : ''}${esc(g.firstName)} ${esc(g.lastName)}</span><span class="co">${esc(g.department || g.company)}</span></li>`).join('') || '<li class="muted">vuoto</li>'}</ul></div>`;
       }).join('')}</div>
@@ -88,10 +89,11 @@
     const list = S.guests.filter(g => !f || `${g.firstName} ${g.lastName} ${g.company} ${g.department}`.toLowerCase().includes(f));
     $('#panel').innerHTML = `
       <div class="row"><input type="text" id="f" placeholder="Filtra…" value="${esc(filter)}">
-        <input type="text" id="nf" placeholder="Nome"><input type="text" id="nl" placeholder="Cognome"><input type="text" id="nc" placeholder="Azienda"><input type="text" id="nd" placeholder="Dipartimento (Danfoss)"><button class="btn small" id="add">+ Aggiungi</button></div>
-      <div class="card" style="padding:0;overflow:auto;max-height:70vh"><table class="list"><thead><tr><th>Cognome</th><th>Nome</th><th>Azienda</th><th>Dip.</th><th>Stato</th><th>Archetipo</th><th>Tavolo</th><th>Facilitatore di</th><th></th></tr></thead><tbody>
+        <input type="text" id="nf" placeholder="Nome"><input type="text" id="nl" placeholder="Cognome"><input type="text" id="nc" placeholder="Azienda"><input type="text" id="nd" placeholder="Dipartimento (Danfoss)"><select id="ng"><option value="">Genere</option><option value="M">M</option><option value="F">F</option></select><button class="btn small" id="add">+ Aggiungi</button></div>
+      <div class="card" style="padding:0;overflow:auto;max-height:70vh"><table class="list"><thead><tr><th>Cognome</th><th>Nome</th><th>Azienda</th><th>Dip.</th><th>Genere</th><th>Stato</th><th>Archetipo</th><th>Tavolo</th><th>Facilitatore di</th><th></th></tr></thead><tbody>
       ${list.map(g => `<tr>
-        <td><b>${esc(g.lastName)}</b></td><td>${esc(g.firstName)}</td><td>${esc(g.company)}</td><td>${esc(g.department)}</td>
+        <td><b>${esc(g.lastName)}</b></td><td>${esc(g.firstName)}</td><td>${esc(g.company)}</td><td><input type="text" data-dept="${g.id}" value="${esc(g.department)}" style="width:110px;font-size:12px;padding:4px 6px;border-radius:8px"></td>
+        <td><select data-gender="${g.id}"><option value="" ${!g.gender ? 'selected' : ''}>—</option><option value="M" ${g.gender === 'M' ? 'selected' : ''}>M</option><option value="F" ${g.gender === 'F' ? 'selected' : ''}>F</option></select></td>
         <td>${g.done ? '<span class="ok">✓ quiz</span>' : g.started ? 'in corso' : g.consent ? 'entrato' : '—'}</td>
         <td style="font-size:11px">${esc(g.archetype || '')}</td>
         <td><select data-move="${g.id}">${tableOptions(g.tableId)}</select></td>
@@ -101,11 +103,13 @@
       <p class="muted">${list.length} persone. ★ = facilitatore. ↺ azzera il quiz (la persona potrà rigiocare).</p>`;
     $('#f').oninput = e => { filter = e.target.value; renderGuests(); $('#f').focus(); $('#f').setSelectionRange(filter.length, filter.length); };
     $('#add').onclick = async () => {
-      try { await api('/api/admin/guests', { method: 'POST', body: { firstName: $('#nf').value, lastName: $('#nl').value, company: $('#nc').value, department: $('#nd').value } }); toast('Aggiunto'); await refresh(); }
+      try { await api('/api/admin/guests', { method: 'POST', body: { firstName: $('#nf').value, lastName: $('#nl').value, company: $('#nc').value, department: $('#nd').value, gender: $('#ng').value } }); toast('Aggiunto'); await refresh(); }
       catch (e) { toast('Errore: ' + (e.data?.error || e.message)); }
     };
     const p = $('#panel');
     p.querySelectorAll('select[data-move]').forEach(s => s.onchange = () => move(Number(s.dataset.move), s.value ? Number(s.value) : null));
+    p.querySelectorAll('select[data-gender]').forEach(s => s.onchange = async () => { await api(`/api/admin/guests/${s.dataset.gender}`, { method: 'PATCH', body: { gender: s.value } }); toast('Genere aggiornato'); await refresh(true); });
+    p.querySelectorAll('input[data-dept]').forEach(i => i.onchange = async () => { await api(`/api/admin/guests/${i.dataset.dept}`, { method: 'PATCH', body: { department: i.value } }); toast('Dipartimento aggiornato'); await refresh(true); });
     p.querySelectorAll('select[data-fac]').forEach(s => s.onchange = async () => { try { await api(`/api/admin/guests/${s.dataset.fac}/facilitator`, { method: 'POST', body: { tableId: s.value ? Number(s.value) : null } }); toast('Facilitatore aggiornato'); await refresh(); } catch (e) { toast('Errore: ' + e.message); } });
     p.querySelectorAll('button[data-reset]').forEach(b => b.onclick = async () => { if (!confirm('Azzerare quiz e tavolo di questa persona?')) return; await api(`/api/admin/guests/${b.dataset.reset}/reset`, { method: 'POST' }); toast('Azzerato'); await refresh(); });
     p.querySelectorAll('button[data-del]').forEach(b => b.onclick = async () => { if (!confirm('Eliminare questa persona?')) return; await api(`/api/admin/guests/${b.dataset.del}`, { method: 'DELETE' }); toast('Eliminato'); await refresh(); });
@@ -121,13 +125,14 @@
         <p></p><button class="btn small" id="saveTables">Salva tavoli</button> <span class="muted">Un tavolo si elimina solo se vuoto; la capienza non può scendere sotto gli occupanti.</span></div>
 
       <div class="card"><h2>2. Invitati (CSV)</h2>
-        <p class="muted">Colonne riconosciute (intestazione obbligatoria, separatore ; o ,): <code>nome; cognome; azienda; dipartimento; tavolo</code>. “tavolo” = numero del tavolo di cui la persona è facilitatore (vuoto per gli altri). Per Danfoss il dipartimento è usato come gruppo da distribuire.</p>
+        <p class="muted">Colonne riconosciute (intestazione obbligatoria, separatore ; o ,): <code>nome; cognome; azienda; dipartimento; genere; tavolo</code>. “genere” = M o F (serve per il bilanciamento), “tavolo” = numero del tavolo di cui la persona è facilitatore (vuoto per gli altri). Per Danfoss il dipartimento è usato come gruppo da distribuire. Reimportando lo stesso file le persone già presenti vengono aggiornate, non duplicate.</p>
         <input type="file" id="csvFile" accept=".csv,text/csv"> <p></p>
-        <textarea id="csv" rows="6" placeholder="nome;cognome;azienda;dipartimento;tavolo&#10;Mario;Rossi;Danfoss;Sales;1&#10;Anna;Bianchi;Partner Srl;;"></textarea><p></p>
+        <textarea id="csv" rows="6" placeholder="nome;cognome;azienda;dipartimento;genere;tavolo&#10;Mario;Rossi;Danfoss;Sales;M;1&#10;Anna;Bianchi;Partner Srl;;F;"></textarea><p></p>
         <div class="row"><button class="btn small" id="imp">Importa (aggiungi/aggiorna)</button><button class="btn small secondary" id="impR">Sostituisci tutta la lista</button></div></div>
 
       <div class="card"><h2>3. Regole</h2>
         <div class="row">Max persone dello stesso gruppo per tavolo prima della penalità forte: <input type="number" id="msg" min="1" max="20" value="${S.settings.max_same_group}" style="width:70px"> <button class="btn small" id="saveMsg">Salva</button></div>
+        <div class="row"><label><input type="checkbox" id="gb" ${S.settings.gender_balance !== '0' ? 'checked' : ''}> Bilanciamento di genere (distribuisce uomini e donne in proporzione su ogni tavolo)</label></div>
         <div class="row"><button class="btn small secondary" id="rebal">Ricalcola tutte le assegnazioni</button><span class="muted">Facilitatori fissi, tutti gli altri ridistribuiti per affinità. Da usare prima della cena, non durante.</span></div></div>
 
       <div class="card danger"><h2>Fine evento</h2><div class="row"><button class="btn small secondary" id="wipe">Cancella tutti i dati personali</button><span class="muted">Irreversibile. Restano solo i tavoli.</span></div></div>`;
@@ -150,6 +155,7 @@
     };
     $('#imp').onclick = () => imp('merge'); $('#impR').onclick = () => imp('replace');
     $('#saveMsg').onclick = () => saveSettings({ max_same_group: Number($('#msg').value) });
+    $('#gb').onchange = e => saveSettings({ gender_balance: e.target.checked });
     $('#rebal').onclick = async () => { if (!confirm('Ricalcolare tutte le assegnazioni? Le persone vedranno il nuovo tavolo al prossimo accesso.')) return; const r = await api('/api/admin/rebalance', { method: 'POST' }); toast(`Riassegnati ${r.moved}` + (r.unseated ? `, senza posto ${r.unseated}` : '')); await refresh(); };
     $('#wipe').onclick = async () => { const c = prompt('Scrivi CANCELLA TUTTO per confermare'); if (c !== 'CANCELLA TUTTO') return; await api('/api/admin/wipe', { method: 'POST', body: { confirm: c } }); toast('Dati cancellati'); await refresh(); };
   }

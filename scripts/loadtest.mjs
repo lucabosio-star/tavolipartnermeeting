@@ -25,14 +25,15 @@ async function adminLogin() {
 
 function makeGuests(n, danfoss, facilitators) {
   const depts = ['Sales', 'Marketing', 'Service', 'Finance', 'HR', 'R&D', 'Operations', 'Legal'];
-  const rows = ['nome;cognome;azienda;dipartimento;tavolo'];
+  const rows = ['nome;cognome;azienda;dipartimento;genere;tavolo'];
   let f = 1;
   for (let i = 1; i <= n; i++) {
     const isD = i <= danfoss;
     const company = isD ? 'Danfoss' : `Partner ${Math.ceil((i - danfoss) / 3)} Srl`;
     const dept = isD ? depts[i % depts.length] : '';
     const table = f <= facilitators && i % 5 === 0 ? f++ : '';
-    rows.push(`Nome${i};Cognome${i};${company};${dept};${table}`);
+    const gender = i % 5 === 1 ? 'F' : 'M'; // ~20% donne, come nella lista reale
+    rows.push(`Nome${i};Cognome${i};${company};${dept};${gender};${table}`);
   }
   return rows.join('\n');
 }
@@ -82,6 +83,9 @@ function verify(state, label) {
   }
   console.log(`   ${label}: occupazione per tavolo = ${state.tables.map(t => byTable.get(t.id).length).join(',')}`);
   console.log(`   ${label}: max persone dello stesso gruppo per tavolo = ${groupStats.join(',')}`);
+  const women = state.tables.map(t => byTable.get(t.id).filter(g => g.gender === 'F').length);
+  console.log(`   ${label}: donne per tavolo = ${women.join(',')}`);
+  return { byTable, women };
   return { byTable };
 }
 
@@ -105,7 +109,10 @@ function verify(state, label) {
   assert(results.every(r => r.tables[0] != null), 'tutti hanno un tavolo (110 persone su 120 posti)');
   st = (await call('/api/admin/state', { cookie: admin })).data;
   assert(st.stats.seated === 110, `seduti = 110 (trovati ${st.stats.seated})`);
-  verify(st, 'A');
+  const vA = verify(st, 'A');
+  const totalWomen = st.guests.filter(g => g.gender === 'F' && g.tableId != null).length;
+  const ideal = totalWomen / st.tables.length;
+  assert(vA.women.every(w => Math.abs(w - ideal) <= 2), `bilanciamento di genere: ogni tavolo entro ±2 dalla media (${ideal.toFixed(1)} donne)`);
   // riaccesso: stesso nome → stesso tavolo, nessuna rigiocata
   const someone = others[0];
   const again = await call('/api/claim', { method: 'POST', body: { guestId: someone.id, consent: true } });
