@@ -13,7 +13,7 @@
     {
       "binding": "DB",
       "database_name": "tavoli-db",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "b9360fcb-050b-4dfb-95f0-1487c92fdc76",
       "migrations_dir": "migrations"
     }
   ],
