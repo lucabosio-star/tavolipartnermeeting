@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { makeAdminToken, verifyAdminToken, timingSafeEqual, randomToken, signValue, verifyValue } from './auth';
-import { DIMENSIONS, pickQuestionIds, serializeQuestions, scoreAnswers, archetypeKey, describeArchetype, type Locale } from './quiz';
+import { DIMENSIONS, DIM_KEYS, pickQuestionIds, serializeQuestions, scoreAnswers, archetypeKey, describeArchetype, describeTraits, type Locale } from './quiz';
 import { rankTables, rebalance, genderShares, DEFAULT_WEIGHTS, type TableState, type Weights } from './assign';
 
 export interface Env {
@@ -89,7 +89,7 @@ function guestView(g: GuestRow, tables: Map<number, TableRow>, settings: Record<
     facilitatorTable: g.facilitator_table_id != null ? { id: g.facilitator_table_id, name: tables.get(g.facilitator_table_id)?.name ?? '' } : null,
     archetype: done && g.archetype ? describeArchetype(g.archetype, locale) : null,
     vector: done ? parseJson<number[]>(g.vector, []) : null,
-    dimensions: DIMENSIONS.map(d => ({ key: d.key, low: d.low[locale], high: d.high[locale] })),
+    traits: done ? describeTraits(parseJson<number[]>(g.vector, []), parseJson<string[]>(g.quiz_question_ids, []), parseJson<Record<string, number>>(g.answers, {}), locale) : null,
     table: done && reveal && table ? { id: table.id, name: table.name } : null,
     waitingTable: done && !g.table_id,     // quiz fatto ma nessun posto libero: l'admin interviene
     revealLater: done && !reveal,
@@ -582,12 +582,12 @@ admin.post('/rebalance', async c => {
 admin.get('/export.csv', async c => {
   const g = await c.env.DB.prepare(`SELECT g.*, t.name AS table_name FROM guests g LEFT JOIN tables t ON t.id = g.table_id ORDER BY g.table_id, g.last_name`).all<GuestRow & { table_name: string | null }>();
   const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const head = ['tavolo', 'nome_tavolo', 'cognome', 'nome', 'azienda', 'dipartimento', 'genere', 'facilitatore_di', 'archetipo', 'energia', 'gusto', 'social', 'metodo', 'assegnato_il', 'assegnato_da'];
+  const head = ['tavolo', 'nome_tavolo', 'cognome', 'nome', 'azienda', 'dipartimento', 'genere', 'facilitatore_di', 'archetipo', ...DIM_KEYS, 'assegnato_il', 'assegnato_da'];
   const lines = [head.join(';')];
   for (const x of g.results) {
     const v = parseJson<number[]>(x.vector, []);
     lines.push([x.table_id, x.table_name, x.last_name, x.first_name, x.company, x.department, x.gender, x.facilitator_table_id,
-      x.archetype ? describeArchetype(x.archetype, 'it').name : '', v[0], v[1], v[2], v[3], x.assigned_at, x.assigned_by].map(esc).join(';'));
+      x.archetype ? describeArchetype(x.archetype, 'it').name : '', ...DIM_KEYS.map((_, i) => v[i]), x.assigned_at, x.assigned_by].map(esc).join(';'));
   }
   return new Response('﻿' + lines.join('\r\n'), { headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="tavoli.csv"' } });
 });
