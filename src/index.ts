@@ -269,7 +269,11 @@ app.post('/api/admin/logout', c => { deleteCookie(c, 'admin_session', { path: '/
 
 const admin = new Hono<App>();
 admin.use('*', async (c, next) => {
-  if (!(await verifyAdminToken(c.env.SESSION_SECRET || '', getCookie(c, 'admin_session')))) return c.json({ error: 'unauthorized' }, 401);
+  // Due modi per autenticarsi: cookie di sessione (pannello web) oppure
+  // header "Authorization: Bearer <ADMIN_PASSWORD>" per automazioni/API.
+  const bearer = (c.req.header('authorization') || '').replace(/^Bearer\s+/i, '');
+  const byHeader = !!bearer && !!c.env.ADMIN_PASSWORD && timingSafeEqual(bearer, c.env.ADMIN_PASSWORD);
+  if (!byHeader && !(await verifyAdminToken(c.env.SESSION_SECRET || '', getCookie(c, 'admin_session')))) return c.json({ error: 'unauthorized' }, 401);
   await next();
 });
 
