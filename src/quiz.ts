@@ -1,12 +1,16 @@
 /**
- * Contenuto del quiz: dimensioni, banca domande, archetipi.
- * Tutto il testo è bilingue (it / fr). Modifica liberamente questo file
- * per cambiare domande, opzioni o nomi degli archetipi.
+ * Contenuto del quiz: tratti, banca domande, archetipi.
+ * Tutto il testo è bilingue (it / fr). Modifica liberamente questo file.
  *
- * Ogni domanda ha 6 opzioni, dal polo "meno" al polo "più" della dimensione,
- * con punteggi -2, -1, -1, +1, +1, +2.
- * Ogni persona riceve UNA domanda casuale per dimensione (4 clic in totale),
- * quindi i risultati sono sempre confrontabili anche se le domande sono diverse.
+ * Impianto "da psicologo", ma leggero: 5 tratti ispirati ai Big Five, letti in chiave conviviale.
+ *   energia  – ricerca di stimoli e ritmo         (contemplativo ↔ esploratore)
+ *   gusto    – apertura al nuovo                  (tradizione ↔ sperimentazione)
+ *   social   – estroversione, dove ricarichi      (salotto ↔ festa)
+ *   metodo   – bisogno di struttura               (pianificatore ↔ improvvisatore)
+ *   bussola  – stile decisionale                  (testa ↔ pancia)
+ * Ogni persona riceve QUESTIONS_PER_DIM domande casuali per tratto (10 in tutto), in ordine mescolato.
+ * Ogni domanda ha 6 opzioni dal polo "meno" al polo "più", con punteggi -2, -1, -1, +1, +1, +2.
+ * Il punteggio di un tratto va quindi da -SCORE_MAX a +SCORE_MAX.
  */
 
 export type Locale = 'it' | 'fr';
@@ -15,11 +19,15 @@ export type L = Record<Locale, string>;
 export interface Option { emoji: string; text: L; score: number }
 export interface Question { id: string; dim: DimKey; text: L; options: Option[] }
 
+export const QUESTIONS_PER_DIM = 2;
+export const SCORE_MAX = 2 * QUESTIONS_PER_DIM;
+
 export const DIMENSIONS = [
   { key: 'energia', low: { it: 'Contemplativo', fr: 'Contemplatif' }, high: { it: 'Esploratore', fr: 'Explorateur' } },
   { key: 'gusto',   low: { it: 'Tradizione',    fr: 'Tradition' },    high: { it: 'Sperimentazione', fr: 'Expérimentation' } },
   { key: 'social',  low: { it: 'Salotto',       fr: 'Salon' },        high: { it: 'Festa', fr: 'Fête' } },
   { key: 'metodo',  low: { it: 'Pianificatore', fr: 'Planificateur' }, high: { it: 'Improvvisatore', fr: 'Improvisateur' } },
+  { key: 'bussola', low: { it: 'Testa',         fr: 'Tête' },         high: { it: 'Pancia', fr: 'Instinct' } },
 ] as const;
 export type DimKey = (typeof DIMENSIONS)[number]['key'];
 export const DIM_KEYS: DimKey[] = DIMENSIONS.map(d => d.key);
@@ -30,7 +38,7 @@ const q = (id: string, dim: DimKey, it: string, fr: string, options: [string, st
 });
 
 export const QUESTIONS: Question[] = [
-  // ---------------- ENERGIA: contemplativo (-) / esploratore (+) ----------------
+  // ---------------- ENERGIA: ricerca di stimoli e ritmo. contemplativo (-) / esploratore (+) ----------------
   q('e1', 'energia', 'Mare o montagna?', 'Mer ou montagne ?', [
     ['🏖️', 'Mare, ombrellone e libro', 'Mer, parasol et bouquin', -2],
     ['🏞️', 'Lago, amaca e silenzio', 'Lac, hamac et silence', -1],
@@ -71,15 +79,15 @@ export const QUESTIONS: Question[] = [
     ['🏎️', 'Un giro in pista', 'Un tour sur circuit', 1],
     ['🪂', 'Un lancio col paracadute', 'Un saut en parachute', 2],
   ]),
-  q('e6', 'energia', 'Il tuo animale guida', 'Ton animal totem', [
-    ['🐢', 'Tartaruga', 'Tortue', -2],
-    ['🐈', 'Gatto', 'Chat', -1],
-    ['🦉', 'Gufo', 'Hibou', -1],
-    ['🐕', 'Cane', 'Chien', 1],
-    ['🐬', 'Delfino', 'Dauphin', 1],
-    ['🐆', 'Ghepardo', 'Guépard', 2],
+  q('e6', 'energia', 'Hai un pomeriggio libero in una città che non conosci', 'Tu as un après-midi libre dans une ville inconnue', [
+    ['☕', 'Un caffè e guardo la gente passare', 'Un café et je regarde passer les gens', -2],
+    ['📖', 'Una libreria, poi un’altra', 'Une librairie, puis une autre', -1],
+    ['🖼️', 'Il museo principale, con calma', 'Le grand musée, tranquillement', -1],
+    ['🚶', 'Cammino finché non trovo qualcosa', 'Je marche jusqu’à trouver quelque chose', 1],
+    ['🚲', 'Bici a noleggio e via', 'Vélo en libre-service et c’est parti', 1],
+    ['🏔️', 'Cerco il punto più alto e ci salgo', 'Je cherche le point le plus haut et j’y monte', 2],
   ]),
-  // ---------------- GUSTO: tradizione (-) / sperimentazione (+) ----------------
+  // ---------------- GUSTO: apertura al nuovo. tradizione (-) / sperimentazione (+) ----------------
   q('g1', 'gusto', 'Al ristorante, da bere?', 'Au restaurant, tu bois quoi ?', [
     ['🍷', 'Barolo, sempre', 'Barolo, toujours', -2],
     ['🥂', 'Bollicine', 'Des bulles', -1],
@@ -96,13 +104,13 @@ export const QUESTIONS: Question[] = [
     ['🥑', 'Quella con l’avocado', 'Celle à l’avocat', 1],
     ['🍍', 'Con l’ananas, e lo dico ad alta voce', 'À l’ananas, et je l’assume', 2],
   ]),
-  q('g3', 'gusto', 'Il caffè', 'Le café', [
-    ['☕', 'Espresso al banco', 'Espresso au comptoir', -2],
-    ['🥛', 'Cappuccino', 'Cappuccino', -1],
-    ['🏠', 'Moka di casa', 'La moka de la maison', -1],
-    ['🍵', 'Matcha', 'Matcha', 1],
-    ['🧊', 'Caffè shakerato', 'Café frappé', 1],
-    ['🧋', 'Cold brew con qualcosa dentro', 'Cold brew avec un truc dedans', 2],
+  q('g3', 'gusto', 'Nel menu c’è un piatto che non conosci', 'Il y a un plat inconnu sur la carte', [
+    ['🙅', 'Passo oltre: il solito non tradisce', 'Je passe : le plat habituel ne trahit pas', -2],
+    ['❓', 'Chiedo cos’è, poi prendo il solito', 'Je demande ce que c’est, puis je prends l’habituel', -1],
+    ['🤝', 'Lo prendo se il cameriere lo garantisce', 'Je le prends si le serveur le garantit', -1],
+    ['🍴', 'Lo prendo se qualcuno lo divide con me', 'Je le prends si quelqu’un le partage', 1],
+    ['😏', 'Lo ordino, al massimo rubo dal vicino', 'Je le commande, au pire je pioche chez le voisin', 1],
+    ['🎯', 'Lo ordino proprio perché non lo conosco', 'Je le commande justement parce que je ne le connais pas', 2],
   ]),
   q('g4', 'gusto', 'La cena ideale', 'Le dîner idéal', [
     ['👵', 'Dalla nonna, menu fisso', 'Chez mamie, menu unique', -2],
@@ -112,13 +120,13 @@ export const QUESTIONS: Question[] = [
     ['🌮', 'Street food dall’altra parte del mondo', 'Street food de l’autre bout du monde', 1],
     ['🧪', 'Degustazione con le schiume', 'Menu dégustation avec des mousses', 2],
   ]),
-  q('g5', 'gusto', 'Il gelato', 'La glace', [
-    ['🍦', 'Fior di latte', 'Fior di latte', -2],
-    ['🟢', 'Pistacchio', 'Pistache', -1],
-    ['🍫', 'Cioccolato fondente', 'Chocolat noir', -1],
-    ['🫚', 'Sorbetto allo zenzero', 'Sorbet au gingembre', 1],
-    ['🧀', 'Gorgonzola e pere, esiste', 'Gorgonzola-poire, ça existe', 1],
-    ['🎲', 'Il gusto del mese, qualunque sia', 'Le parfum du mois, quel qu’il soit', 2],
+  q('g5', 'gusto', 'Esce un nuovo gadget tecnologico', 'Un nouveau gadget tech vient de sortir', [
+    ['📻', 'Il mio funziona ancora benissimo', 'Le mien marche encore très bien', -2],
+    ['⏳', 'Aspetto la terza versione', 'J’attends la troisième version', -1],
+    ['👀', 'Leggo le recensioni per un anno', 'Je lis les avis pendant un an', -1],
+    ['🛒', 'Lo compro quando scende di prezzo', 'Je l’achète quand le prix baisse', 1],
+    ['📦', 'Lo ordino il giorno dell’uscita', 'Je le commande le jour de la sortie', 1],
+    ['🌙', 'Ero in coda la notte prima', 'J’étais dans la file la veille au soir', 2],
   ]),
   q('g6', 'gusto', 'Musica in macchina', 'Musique en voiture', [
     ['🎻', 'Classica', 'Classique', -2],
@@ -128,7 +136,7 @@ export const QUESTIONS: Question[] = [
     ['🎹', 'Elettronica', 'Électro', 1],
     ['🎧', 'Playlist “scoperte della settimana”', 'Playlist « découvertes de la semaine »', 2],
   ]),
-  // ---------------- SOCIAL: salotto (-) / festa (+) ----------------
+  // ---------------- SOCIAL: estroversione, dove ricarichi le energie. salotto (-) / festa (+) ----------------
   q('s1', 'social', 'L’aperitivo ideale', 'L’apéro idéal', [
     ['🛋️', 'A casa con tre amici', 'À la maison avec trois amis', -2],
     ['🍷', 'Enoteca tranquilla', 'Bar à vin tranquille', -1],
@@ -153,13 +161,13 @@ export const QUESTIONS: Question[] = [
     ['🎵', 'Solo canzoni italiane, ma tutte', 'Seulement des chansons italiennes, mais toutes', 1],
     ['🎶', 'Ho già scelto la canzone', 'J’ai déjà choisi la chanson', 2],
   ]),
-  q('s4', 'social', 'Sabato sera', 'Samedi soir', [
-    ['📚', 'Libro e coperta', 'Livre et plaid', -2],
-    ['🎬', 'Cinema in due', 'Ciné à deux', -1],
-    ['🍿', 'Serie TV e divano', 'Série et canapé', -1],
-    ['🍕', 'Cena con dieci persone', 'Dîner à dix', 1],
-    ['🎲', 'Giochi da tavolo fino a tardi', 'Jeux de société jusqu’à tard', 1],
-    ['🎪', 'Concerto o festival', 'Concert ou festival', 2],
+  q('s4', 'social', 'Dopo una giornata intera di convegno', 'Après une journée entière de séminaire', [
+    ['🛏️', 'Camera, silenzio, room service', 'Chambre, silence, room service', -2],
+    ['🚶', 'Una passeggiata da solo', 'Une balade en solo', -1],
+    ['🍝', 'Cena con un collega fidato', 'Dîner avec un collègue de confiance', -1],
+    ['🍸', 'Aperitivo con il gruppo', 'Apéro avec le groupe', 1],
+    ['🍽️', 'Cena con tutti, poi a nanna', 'Dîner avec tout le monde, puis dodo', 1],
+    ['🌙', 'Cena, dopocena e ultimo a lasciare il bar', 'Dîner, after, et dernier à quitter le bar', 2],
   ]),
   q('s5', 'social', 'Nuovo gruppo WhatsApp', 'Nouveau groupe WhatsApp', [
     ['🔇', 'Silenzioso per sempre', 'En sourdine pour toujours', -2],
@@ -169,15 +177,15 @@ export const QUESTIONS: Question[] = [
     ['😂', 'Mando i meme', 'J’envoie les memes', 1],
     ['📸', 'Propongo subito una cena', 'Je propose direct un dîner', 2],
   ]),
-  q('s6', 'social', 'Il tuo superpotere', 'Ton super-pouvoir', [
-    ['🫥', 'Invisibilità', 'Invisibilité', -2],
-    ['🧠', 'Leggere nel pensiero', 'Lire dans les pensées', -1],
-    ['⏸️', 'Fermare il tempo', 'Arrêter le temps', -1],
-    ['🗣️', 'Parlare tutte le lingue', 'Parler toutes les langues', 1],
-    ['🧲', 'Attirare le persone giuste', 'Attirer les bonnes personnes', 1],
-    ['✨', 'Far ridere chiunque', 'Faire rire n’importe qui', 2],
+  q('s6', 'social', 'In treno, il vicino attacca bottone', 'Dans le train, le voisin engage la conversation', [
+    ['🎧', 'Cuffie su, anche spente', 'Casque sur les oreilles, même éteint', -2],
+    ['😴', 'Finto sonno, tecnica collaudata', 'Faux sommeil, technique éprouvée', -1],
+    ['🙂', 'Due frasi gentili e torno al libro', 'Deux phrases polies et je retourne à mon livre', -1],
+    ['💬', 'Chiacchiero volentieri fino a Bologna', 'Je papote volontiers jusqu’à Bologne', 1],
+    ['📇', 'Scambio il contatto', 'On échange nos contacts', 1],
+    ['🍻', 'A fine viaggio siamo già a cena insieme', 'À l’arrivée on dîne déjà ensemble', 2],
   ]),
-  // ---------------- METODO: pianificatore (-) / improvvisatore (+) ----------------
+  // ---------------- METODO: bisogno di struttura. pianificatore (-) / improvvisatore (+) ----------------
   q('m1', 'metodo', 'La valigia', 'La valise', [
     ['📋', 'Lista fatta una settimana prima', 'Liste faite une semaine avant', -2],
     ['🧳', 'La sera prima, con calma', 'La veille, tranquillement', -1],
@@ -210,13 +218,13 @@ export const QUESTIONS: Question[] = [
     ['🎄', 'Riciclo con stile', 'Je recycle avec style', 1],
     ['🤝', 'Un buono, risolto', 'Un bon cadeau, réglé', 2],
   ]),
-  q('m5', 'metodo', 'Ordinare al ristorante', 'Commander au restaurant', [
-    ['📖', 'Ho letto il menu online ieri', 'J’ai lu la carte en ligne hier', -2],
-    ['👀', 'Lo leggo tutto, due volte', 'Je lis tout, deux fois', -1],
-    ['🔁', 'Prendo sempre lo stesso piatto', 'Je prends toujours le même plat', -1],
-    ['👋', 'Chiedo cosa consiglia', 'Je demande ce qu’on conseille', 1],
-    ['🎯', 'Punto il dito a caso', 'Je pointe au hasard', 1],
-    ['🙈', 'Prendo quello che prende il vicino', 'Je prends la même chose que le voisin', 2],
+  q('m5', 'metodo', 'La tua scrivania', 'Ton bureau', [
+    ['📐', 'Ogni cosa al suo posto, sempre', 'Chaque chose à sa place, toujours', -2],
+    ['🗂️', 'Ordinata il venerdì sera', 'Rangée le vendredi soir', -1],
+    ['🧹', 'Ordinata quando arriva qualcuno', 'Rangée quand quelqu’un arrive', -1],
+    ['📚', 'Pile ordinate di cose disordinate', 'Des piles ordonnées de choses en désordre', 1],
+    ['🌪️', 'Caos creativo, ma trovo tutto', 'Chaos créatif, mais je trouve tout', 1],
+    ['🗺️', 'Serve una mappa per trovare il mouse', 'Il faut une carte pour trouver la souris', 2],
   ]),
   q('m6', 'metodo', 'Il tuo frigo', 'Ton frigo', [
     ['🗂️', 'Organizzato per categorie', 'Rangé par catégories', -2],
@@ -226,17 +234,68 @@ export const QUESTIONS: Question[] = [
     ['🧀', 'Un formaggio e una speranza', 'Un fromage et un espoir', 1],
     ['📞', 'Il delivery è una categoria', 'La livraison, c’est une catégorie', 2],
   ]),
+  // ---------------- BUSSOLA: come decidi. testa (-) / pancia (+) ----------------
+  q('b1', 'bussola', 'Devi scegliere il ristorante per stasera', 'Tu dois choisir le restaurant de ce soir', [
+    ['📊', 'Confronto le recensioni su tre app', 'Je compare les avis sur trois applis', -2],
+    ['🗣️', 'Chiedo a chi ci è già stato', 'Je demande à qui y est déjà allé', -1],
+    ['📋', 'Quello con il menu online più chiaro', 'Celui dont la carte en ligne est la plus claire', -1],
+    ['✨', 'Quello che mi ispira passando', 'Celui qui m’inspire en passant', 1],
+    ['👥', 'Dove c’è più gente dentro', 'Là où il y a le plus de monde', 1],
+    ['🕯️', 'Il primo con la luce calda', 'Le premier avec une lumière chaleureuse', 2],
+  ]),
+  q('b2', 'bussola', 'Un acquisto importante, tipo l’auto', 'Un gros achat, genre la voiture', [
+    ['📈', 'Foglio di calcolo con pro e contro', 'Tableur avec le pour et le contre', -2],
+    ['😴', 'Leggo tutto, poi ci dormo sopra', 'Je lis tout, puis je dors dessus', -1],
+    ['👨‍🔧', 'Chiedo a un esperto e mi fido', 'Je demande à un expert et je lui fais confiance', -1],
+    ['👀', 'Prima impressione, poi verifico', 'Première impression, puis je vérifie', 1],
+    ['😊', 'Se mi fa sorridere, è quella', 'Si ça me fait sourire, c’est la bonne', 1],
+    ['⚡', 'L’ho già comprata mentre leggevi la domanda', 'Je l’ai déjà achetée pendant que tu lisais la question', 2],
+  ]),
+  q('b3', 'bussola', 'Un amico ti racconta un problema', 'Un ami te raconte un problème', [
+    ['📝', 'Gli faccio una lista di soluzioni', 'Je lui fais une liste de solutions', -2],
+    ['❓', 'Faccio domande per capire bene', 'Je pose des questions pour bien comprendre', -1],
+    ['🔗', 'Gli mando un articolo utile', 'Je lui envoie un article utile', -1],
+    ['👂', 'Lo ascolto e basta', 'Je l’écoute, c’est tout', 1],
+    ['🤗', 'Gli dico che lo capisco e lo abbraccio', 'Je lui dis que je comprends et je le serre dans mes bras', 1],
+    ['😢', 'Piango prima io', 'Je pleure avant lui', 2],
+  ]),
+  q('b4', 'bussola', 'Film del sabato sera', 'Film du samedi soir', [
+    ['🎥', 'Documentario', 'Documentaire', -2],
+    ['🔍', 'Thriller con il colpo di scena', 'Thriller avec retournement final', -1],
+    ['🧩', 'Quello con la trama più intelligente', 'Celui à l’intrigue la plus maligne', -1],
+    ['😂', 'Commedia', 'Comédie', 1],
+    ['🤝', 'Quello che mi consiglia un amico', 'Celui qu’un ami me conseille', 1],
+    ['😭', 'Quello che fa piangere, e lo so già', 'Celui qui fait pleurer, et je le sais déjà', 2],
+  ]),
+  q('b5', 'bussola', 'Qualcuno ti fa un complimento', 'Quelqu’un te fait un compliment', [
+    ['🤔', 'Chiedo in che senso', 'Je demande dans quel sens', -2],
+    ['🙋', '“Grazie, lavoro di squadra”', '« Merci, travail d’équipe »', -1],
+    ['🤨', 'Penso che esageri', 'Je pense qu’il exagère', -1],
+    ['😊', 'Sorrido e ringrazio', 'Je souris et je remercie', 1],
+    ['🔁', 'Lo ricambio subito', 'Je le lui rends aussitôt', 1],
+    ['💭', 'Me lo ricordo per tre settimane', 'Je m’en souviens pendant trois semaines', 2],
+  ]),
+  q('b6', 'bussola', 'Devi dire di no a qualcuno', 'Tu dois dire non à quelqu’un', [
+    ['📑', 'Spiego i motivi, in ordine', 'J’explique les raisons, dans l’ordre', -2],
+    ['✉️', 'Per iscritto, così è chiaro', 'Par écrit, comme ça c’est clair', -1],
+    ['⏳', 'Prendo tempo e poi dico no', 'Je gagne du temps puis je dis non', -1],
+    ['😅', 'Dico no, poi ci penso tutta la notte', 'Je dis non, puis j’y pense toute la nuit', 1],
+    ['🙈', 'Dico “forse” sperando che passi', 'Je dis « peut-être » en espérant que ça passe', 1],
+    ['🫠', 'Dico sì', 'Je dis oui', 2],
+  ]),
 ];
 
 const QUESTION_BY_ID = new Map(QUESTIONS.map(x => [x.id, x]));
 export const getQuestion = (id: string) => QUESTION_BY_ID.get(id);
 
-/** Estrae una domanda casuale per dimensione. */
+/** Estrae QUESTIONS_PER_DIM domande casuali per tratto e mescola l'ordine. */
 export function pickQuestionIds(): string[] {
-  return DIM_KEYS.map(dim => {
-    const pool = QUESTIONS.filter(x => x.dim === dim);
-    return pool[Math.floor(Math.random() * pool.length)].id;
-  });
+  const ids: string[] = [];
+  for (const dim of DIM_KEYS) {
+    const pool = QUESTIONS.filter(x => x.dim === dim).map(x => x.id).sort(() => Math.random() - 0.5);
+    ids.push(...pool.slice(0, QUESTIONS_PER_DIM));
+  }
+  return ids.sort(() => Math.random() - 0.5);
 }
 
 export function serializeQuestions(ids: string[], locale: Locale) {
@@ -246,7 +305,7 @@ export function serializeQuestions(ids: string[], locale: Locale) {
   });
 }
 
-/** Da {questionId: optionIndex} a vettore [energia, gusto, social, metodo]. Lancia su input non valido. */
+/** Da {questionId: optionIndex} al vettore dei tratti (ordine DIM_KEYS). Lancia su input non valido. */
 export function scoreAnswers(questionIds: string[], answers: Record<string, number>): number[] {
   const vec: Record<string, number> = {};
   for (const id of questionIds) {
@@ -259,8 +318,77 @@ export function scoreAnswers(questionIds: string[], answers: Record<string, numb
   return DIM_KEYS.map(k => vec[k] ?? 0);
 }
 
+// ---------------- LETTURA DEI TRATTI ----------------
+// Per ogni tratto, una frase per intensità: forte verso il polo "meno", lieve "meno", lieve "più", forte "più".
+const TRAIT_TEXT: Record<DimKey, [L, L, L, L]> = {
+  energia: [
+    { it: 'Il relax è una disciplina e tu sei cintura nera.', fr: 'Le repos est une discipline et tu es ceinture noire.' },
+    { it: 'Ti piace il ritmo lento, con qualche strappo quando ne vale la pena.', fr: 'Tu aimes le rythme lent, avec quelques accélérations quand ça en vaut la peine.' },
+    { it: 'Hai bisogno di muoverti, ma sai anche goderti una sedia.', fr: 'Tu as besoin de bouger, mais tu sais aussi apprécier une chaise.' },
+    { it: 'La calma ti annoia dopo dieci minuti: ti serve una meta.', fr: 'Le calme t’ennuie au bout de dix minutes : il te faut un but.' },
+  ],
+  gusto: [
+    { it: 'Le cose buone sono già state inventate e tu le difendi.', fr: 'Les bonnes choses ont déjà été inventées et tu les défends.' },
+    { it: 'Ami i classici, ma un’eccezione ben raccontata ti convince.', fr: 'Tu aimes les classiques, mais une exception bien racontée te convainc.' },
+    { it: 'Curioso per natura: assaggi prima, giudichi poi.', fr: 'Curieux de nature : tu goûtes d’abord, tu juges ensuite.' },
+    { it: 'Se una cosa non l’hai mai provata, è già un buon motivo.', fr: 'Si tu n’as jamais essayé une chose, c’est déjà une bonne raison.' },
+  ],
+  social: [
+    { it: 'Ricarichi le energie da solo: le feste le osservi da lontano, e bene.', fr: 'Tu recharges tes batteries en solo : les fêtes, tu les observes de loin, et bien.' },
+    { it: 'Poche persone, scelte bene: la qualità batte il numero.', fr: 'Peu de gens, bien choisis : la qualité bat le nombre.' },
+    { it: 'Le persone ti danno energia, anche se poi ti serve un divano.', fr: 'Les gens te donnent de l’énergie, même s’il te faut ensuite un canapé.' },
+    { it: 'La stanza si accende quando entri, e lo sai.', fr: 'La pièce s’allume quand tu entres, et tu le sais.' },
+  ],
+  metodo: [
+    { it: 'Hai un piano B per il piano B. E funziona.', fr: 'Tu as un plan B pour le plan B. Et ça marche.' },
+    { it: 'Ti piace sapere dove vai, ma lasci qualche spazio bianco.', fr: 'Tu aimes savoir où tu vas, mais tu laisses quelques cases vides.' },
+    { it: 'Un po’ di struttura ti serve, il resto lo inventi strada facendo.', fr: 'Un peu de structure te sert, le reste tu l’inventes en route.' },
+    { it: 'I piani sono per gli altri: tu arrivi lo stesso, e con storie migliori.', fr: 'Les plans, c’est pour les autres : tu arrives quand même, avec de meilleures histoires.' },
+  ],
+  bussola: [
+    { it: 'Decidi con la testa: dati, confronto, poi si parte.', fr: 'Tu décides avec la tête : données, comparaison, puis on y va.' },
+    { it: 'Ragioni prima, ma ascolti anche la pancia prima di firmare.', fr: 'Tu réfléchis d’abord, mais tu écoutes aussi ton instinct avant de signer.' },
+    { it: 'Ti fidi della prima impressione, poi al massimo la verifichi.', fr: 'Tu te fies à ta première impression, puis au mieux tu la vérifies.' },
+    { it: 'Decidi di pancia e di cuore, e raramente te ne penti.', fr: 'Tu décides à l’instinct et au cœur, et tu le regrettes rarement.' },
+  ],
+};
+
+// Pareggio esatto (es. -2 e +2): lettura neutra, senza forzare un polo.
+const TRAIT_NEUTRAL: Record<DimKey, L> = {
+  energia: { it: 'Un giorno amaca, un giorno paracadute: dipende da chi te lo propone.', fr: 'Un jour hamac, un jour parachute : ça dépend de qui te le propose.' },
+  gusto:   { it: 'Un piede nella tradizione e uno nel menu degustazione.', fr: 'Un pied dans la tradition et un dans le menu dégustation.' },
+  social:  { it: 'Sai stare al centro della pista e sul divano con la stessa naturalezza.', fr: 'Tu sais être au milieu de la piste et sur le canapé avec le même naturel.' },
+  metodo:  { it: 'Pianifichi quanto basta per poterti permettere di improvvisare.', fr: 'Tu planifies juste assez pour pouvoir te permettre d’improviser.' },
+  bussola: { it: 'Testa e pancia votano a turno, e di solito sono d’accordo.', fr: 'Tête et instinct votent à tour de rôle, et sont généralement d’accord.' },
+};
+
+export function traitLevel(score: number): 0 | 1 | 2 | 3 {
+  const strong = Math.ceil(SCORE_MAX * 0.6); // con SCORE_MAX = 4: forte da |3| in su
+  if (score <= -strong) return 0;
+  if (score < 0) return 1;
+  if (score < strong) return 2;
+  return 3;
+}
+
+/** Lettura completa dei tratti per la schermata risultato: polo, intensità, frase e risposte date. */
+export function describeTraits(vector: number[], questionIds: string[], answers: Record<string, number>, locale: Locale) {
+  return DIMENSIONS.map((d, i) => {
+    const score = vector[i] ?? 0;
+    const level = traitLevel(score);
+    const picked = questionIds.map(id => QUESTION_BY_ID.get(id)).filter((x): x is Question => !!x && x.dim === d.key)
+      .map(x => ({ emoji: x.options[answers[x.id]]?.emoji ?? '', text: x.options[answers[x.id]]?.text[locale] ?? '' }));
+    return {
+      key: d.key, low: d.low[locale], high: d.high[locale], score, max: SCORE_MAX,
+      pole: score === 0 ? null : score > 0 ? d.high[locale] : d.low[locale],
+      strong: level === 0 || level === 3,
+      text: score === 0 ? TRAIT_NEUTRAL[d.key][locale] : TRAIT_TEXT[d.key][level][locale],
+      answers: picked,
+    };
+  });
+}
+
 // ---------------- ARCHETIPI ----------------
-// Titolo = energia × gusto ; epiteto = social × metodo  → 16 combinazioni buffe.
+// Titolo = energia × gusto ; epiteto = social × metodo ; la bussola colora la descrizione.
 interface Arch { title: L; blurb: L; emoji: string }
 
 const TITLES: Record<string, Arch> = {

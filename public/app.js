@@ -20,6 +20,7 @@
       facilitatorIntro: t => `Sei il padrone di casa del tavolo ${t}: il tuo profilo darà il tono al tavolo e attirerà gli ospiti più affini.`,
       facilitatorBadge: t => `Padrone di casa del tavolo ${t}`,
       inviteInvalid: 'Questo link non è valido o è scaduto. Cerca il tuo nome qui sotto.',
+      whyTitle: 'Perché: i tuoi cinque tratti e le risposte che li hanno deciso',
       deviceUsed: n => `Da questo telefono ha già giocato ${n}. Vale una giocata per telefono: se sei tu, cerca il tuo nome per rivedere il tavolo.`,
       regret: mmss => `Hai cambiato idea? Entro ${mmss} puoi chiedere allo staff di farti rifare il test.`,
     },
@@ -42,6 +43,7 @@
       facilitatorIntro: t => `Tu es l’hôte de la table ${t} : ton profil donnera le ton de la table et attirera les invités les plus proches de toi.`,
       facilitatorBadge: t => `Hôte de la table ${t}`,
       inviteInvalid: 'Ce lien n’est pas valide ou a expiré. Cherche ton nom ci-dessous.',
+      whyTitle: 'Pourquoi : tes cinq traits et les réponses qui les ont décidés',
       deviceUsed: n => `${n} a déjà joué depuis ce téléphone. Une seule partie par téléphone : si c’est toi, cherche ton nom pour revoir ta table.`,
       regret: mmss => `Tu as changé d’avis ? Pendant ${mmss} tu peux demander au staff de te faire refaire le test.`,
     },
@@ -218,9 +220,14 @@
   // ------------------------------------------------------------ risultato
   function renderResult(g, fresh) {
     const a = g.archetype;
-    const dims = (g.dimensions || []).map((d, i) => {
-      const v = g.vector ? g.vector[i] : 0; const pct = ((v + 2) / 4) * 100;
-      return `<div class="dim"><div class="lbl"><span>${esc(d.low)}</span><span>${esc(d.high)}</span></div><div class="bar"><b style="left:${pct}%"></b></div></div>`;
+    const dims = (g.traits || []).map(tr => {
+      const pct = ((tr.score + tr.max) / (2 * tr.max)) * 100;
+      return `<div class="dim">
+        <div class="lbl"><span class="${tr.score < 0 ? 'pole' : ''}">${esc(tr.low)}</span><span class="${tr.score > 0 ? 'pole' : ''}">${esc(tr.high)}</span></div>
+        <div class="bar"><b style="left:${pct}%"></b></div>
+        <p class="why">${esc(tr.text)}</p>
+        <div class="picked">${tr.answers.map(a => `<span class="chip">${a.emoji} ${esc(a.text)}</span>`).join('')}</div>
+      </div>`;
     }).join('');
     const tableBlock = g.table
       ? `<div class="big-table"><div class="muted">${t('yourTable')}</div><div class="n">${g.table.id}</div>${g.table.name ? `<div class="name">${esc(g.table.name)}</div>` : ''}${g.facilitatorTable ? `<p class="muted" style="margin-top:8px">★ ${t('facilitatorBadge')(g.facilitatorTable.id)}</p>` : ''}</div>`
@@ -229,7 +236,7 @@
     app.innerHTML = `
       ${!fresh ? `<div class="card center"><p class="muted">${t('alreadyDone')}</p><b>${esc(g.firstName)} ${esc(g.lastName)}</b></div>` : ''}
       <div class="card">${tableBlock}</div>
-      ${a ? `<div class="card"><div class="arch"><div class="em">${a.emoji}</div><div class="muted">${t('youAre')}</div><div class="nm">${esc(a.name)}</div><p class="muted">${esc(a.blurb)}</p></div><div class="dims">${dims}</div></div>` : ''}
+      ${a ? `<div class="card"><div class="arch"><div class="em">${a.emoji}</div><div class="muted">${t('youAre')}</div><div class="nm">${esc(a.name)}</div><p class="muted">${esc(a.blurb)}</p></div><p class="muted" style="margin-top:14px"><b>${t('whyTitle')}</b></p><div class="dims">${dims}</div></div>` : ''}
       <p class="center muted">${t('keep')}</p>
       <p class="center regret" id="regret"></p>
       <button class="btn secondary" id="back">${t('again')}</button>`;

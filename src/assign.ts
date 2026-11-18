@@ -8,7 +8,7 @@
  *   + leggera preferenza per i tavoli meno pieni
  * Il tavolo con costo minimo vince; a parità decide il caso.
  */
-import { DIM_KEYS } from './quiz';
+import { DIM_KEYS, SCORE_MAX } from './quiz';
 
 export interface TableState {
   id: number;
@@ -26,7 +26,7 @@ export interface Weights {
 }
 export const DEFAULT_WEIGHTS: Weights = { maxSameGroup: 2, groupSoft: 1.5, groupHard: 12, fill: 4, gender: 3, genderShare: {} };
 
-const MAX_DIST = Math.sqrt(DIM_KEYS.length * 16); // 8 con 4 dimensioni in [-2,2]
+const MAX_DIST = Math.sqrt(DIM_KEYS.length * (2 * SCORE_MAX) ** 2); // distanza massima tra due profili
 
 export function distance(a: number[], b: number[]): number {
   let s = 0;

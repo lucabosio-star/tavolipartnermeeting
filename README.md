@@ -90,14 +90,17 @@ Ogni tavolo con posti liberi riceve un costo; vince il più basso:
 
 ## Il quiz
 
-4 dimensioni, ciascuna con 6 domande; ogni persona riceve 1 domanda casuale per dimensione (4 clic):
+5 tratti ispirati ai Big Five in chiave conviviale, ciascuno con 6 domande da 6 opzioni; ogni persona riceve
+2 domande casuali per tratto (10 clic), in ordine mescolato. Il risultato mostra per ogni tratto il polo,
+una frase di lettura e le risposte che l'hanno determinato.
 
-| Dimensione | Polo − | Polo + |
-| --- | --- | --- |
-| energia | Contemplativo | Esploratore |
-| gusto | Tradizione | Sperimentazione |
-| social | Salotto | Festa |
-| metodo | Pianificatore | Improvvisatore |
+| Tratto | Polo − | Polo + | Cosa misura |
+| --- | --- | --- | --- |
+| energia | Contemplativo | Esploratore | ricerca di stimoli e ritmo |
+| gusto | Tradizione | Sperimentazione | apertura al nuovo |
+| social | Salotto | Festa | estroversione |
+| metodo | Pianificatore | Improvvisatore | bisogno di struttura |
+| bussola | Testa | Pancia | stile decisionale |
 
 L'archetipo combina energia×gusto (titolo: Esploratore Fusion, Sherpa del Barolo, Sommelier da Divano, Custode della Nonna)
 con social×metodo (epiteto). Tutto in `src/quiz.ts`, bilingue italiano/francese; la lingua è rilevata dal telefono e cambiabile con il toggle IT/FR.
