@@ -20,6 +20,8 @@
       facilitatorIntro: t => `Sei il padrone di casa del tavolo ${t}: il tuo profilo darà il tono al tavolo e attirerà gli ospiti più affini.`,
       facilitatorBadge: t => `Padrone di casa del tavolo ${t}`,
       inviteInvalid: 'Questo link non è valido o è scaduto. Cerca il tuo nome qui sotto.',
+      deviceUsed: n => `Da questo telefono ha già giocato ${n}. Vale una giocata per telefono: se sei tu, cerca il tuo nome per rivedere il tavolo.`,
+      regret: mmss => `Hai cambiato idea? Entro ${mmss} puoi chiedere allo staff di farti rifare il test.`,
     },
     fr: {
       title: 'Trouve ta table', intro: 'Quatre questions, zéro prise de tête. On te dit qui tu es (à peu près) et où tu t’assois ce soir.',
@@ -40,6 +42,8 @@
       facilitatorIntro: t => `Tu es l’hôte de la table ${t} : ton profil donnera le ton de la table et attirera les invités les plus proches de toi.`,
       facilitatorBadge: t => `Hôte de la table ${t}`,
       inviteInvalid: 'Ce lien n’est pas valide ou a expiré. Cherche ton nom ci-dessous.',
+      deviceUsed: n => `${n} a déjà joué depuis ce téléphone. Une seule partie par téléphone : si c’est toi, cherche ton nom pour revoir ta table.`,
+      regret: mmss => `Tu as changé d’avis ? Pendant ${mmss} tu peux demander au staff de te faire refaire le test.`,
     },
   };
 
@@ -123,7 +127,10 @@
         const r = await api('/api/claim', { method: 'POST', body: inv ? { inviteToken: inv.token, consent: true, locale: lang } : { guestId: state.selected.id, consent: true, locale: lang } });
         state.guest = r.guest; state.questions = null; state.answers = {}; state.qi = 0;
         render();
-      } catch (e) { $('#err').textContent = t('error'); go.disabled = false; }
+      } catch (e) {
+        $('#err').textContent = e.status === 409 && e.data?.error === 'device_used' ? t('deviceUsed')(`${e.data.by.firstName} ${e.data.by.lastName}`) : t('error');
+        go.disabled = false;
+      }
     };
     if (!state.selected && q) setTimeout(() => q.focus(), 50);
   }
@@ -224,8 +231,27 @@
       <div class="card">${tableBlock}</div>
       ${a ? `<div class="card"><div class="arch"><div class="em">${a.emoji}</div><div class="muted">${t('youAre')}</div><div class="nm">${esc(a.name)}</div><p class="muted">${esc(a.blurb)}</p></div><div class="dims">${dims}</div></div>` : ''}
       <p class="center muted">${t('keep')}</p>
+      <p class="center regret" id="regret"></p>
       <button class="btn secondary" id="back">${t('again')}</button>`;
+    startRegretCountdown(g);
     $('#back').onclick = async () => { await api('/api/logout', { method: 'POST' }); state = { guest: null, selected: null, questions: null, answers: {}, qi: 0, invite: null, inviteError: false }; render(); };
+  }
+
+  // Finestra di ripensamento: 5 minuti dall'assegnazione, scritta piccola con conto alla rovescia.
+  let regretTimer;
+  function startRegretCountdown(g) {
+    clearInterval(regretTimer);
+    const el = document.getElementById('regret');
+    if (!el || !g.assignedAt || !g.table) return;
+    const skew = Date.now() - new Date(g.now).getTime();          // allinea l'orologio del telefono al server
+    const end = new Date(g.assignedAt).getTime() + 5 * 60 * 1000 + skew;
+    const tick = () => {
+      const left = end - Date.now();
+      if (left <= 0) { el.textContent = ''; clearInterval(regretTimer); return; }
+      const m = Math.floor(left / 60000), s = Math.floor((left % 60000) / 1000);
+      el.textContent = t('regret')(`${m}:${String(s).padStart(2, '0')}`);
+    };
+    tick(); regretTimer = setInterval(tick, 1000);
   }
 
   // ------------------------------------------------------------ avvio

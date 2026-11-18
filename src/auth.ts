@@ -35,3 +35,15 @@ export function randomToken(bytes = 24): string {
   crypto.getRandomValues(buf);
   return Array.from(buf, b => b.toString(16).padStart(2, '0')).join('');
 }
+
+/** Firma un valore qualsiasi (es. id ospite) per un cookie non falsificabile. */
+export async function signValue(secret: string, value: string): Promise<string> {
+  return `${value}.${await hmac(secret, value)}`;
+}
+export async function verifyValue(secret: string, token: string | undefined): Promise<string | null> {
+  if (!token) return null;
+  const i = token.lastIndexOf('.');
+  if (i <= 0) return null;
+  const value = token.slice(0, i), sig = token.slice(i + 1);
+  return timingSafeEqual(await hmac(secret, value), sig) ? value : null;
+}
