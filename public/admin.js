@@ -141,7 +141,9 @@
         <div class="row">Crea <input type="number" id="genN" min="1" max="99" value="${S.tables.length || 12}" style="width:70px"> tavoli da <input type="number" id="genC" min="1" max="50" value="${S.settings.default_capacity || 10}" style="width:70px"> posti <button class="btn small" id="gen">Genera mancanti</button></div>
         <table class="list"><thead><tr><th>N.</th><th>Nome (tema del tavolo)</th><th>Posti</th><th>Facilitatore</th><th>Link personale per il test</th><th></th></tr></thead><tbody id="tbody">
           ${S.tables.map(t => { const fac = S.guests.find(g => g.facilitatorTableId === t.id); return `<tr><td>${t.id}</td><td><input type="text" data-name="${t.id}" value="${esc(t.name)}" style="width:100%"></td><td><input type="number" data-cap="${t.id}" value="${t.capacity}" min="1" max="50" style="width:70px"></td>
-            <td><select data-facsel="${t.id}"><option value="">— nessuno —</option>${S.guests.map(g => `<option value="${g.id}" ${fac && fac.id === g.id ? 'selected' : ''}>${esc(g.lastName)} ${esc(g.firstName)} (${esc(g.company)})</option>`).join('')}</select></td>
+            <td class="facell">${fac
+              ? `<span class="facname">★ ${esc(fac.firstName)} ${esc(fac.lastName)} <small class="muted">${esc(fac.company)}</small></span> <button class="btn small secondary" data-facclear="${t.id}" title="Rimuovi facilitatore">✕</button>`
+              : `<span class="facsearch"><input type="text" data-facq="${t.id}" placeholder="Cerca nome…" autocomplete="off"><div class="sugg hidden" data-facsugg="${t.id}"></div></span>`}</td>
             <td>${fac && fac.inviteToken ? `<button class="btn small secondary" data-copy="${fac.inviteToken}">📋 Copia link</button> <span class="muted">${fac.done ? '✓ test fatto' : 'test non ancora fatto'}</span>` : '<span class="muted">—</span>'}</td>
             <td><button class="btn small secondary" data-rm="${t.id}">🗑</button></td></tr>`; }).join('')}
         </tbody></table>
@@ -169,14 +171,20 @@
       await saveTables(tables);
     };
     $('#saveTables').onclick = () => saveTables(S.tables.map(t => ({ id: t.id, name: p.querySelector(`[data-name="${t.id}"]`).value, capacity: Number(p.querySelector(`[data-cap="${t.id}"]`).value) })));
-    p.querySelectorAll('select[data-facsel]').forEach(sel => sel.onchange = async () => {
-      const tid = Number(sel.dataset.facsel);
-      const prev = S.guests.find(g => g.facilitatorTableId === tid);
-      try {
-        if (sel.value) await api(`/api/admin/guests/${sel.value}/facilitator`, { method: 'POST', body: { tableId: tid } });
-        else if (prev) await api(`/api/admin/guests/${prev.id}/facilitator`, { method: 'POST', body: { tableId: null } });
-        toast('Facilitatore aggiornato'); await refresh();
-      } catch (e) { toast('Errore: ' + (e.data?.error || e.message)); }
+    const setFac = async (guestId, tid) => { try { await api(`/api/admin/guests/${guestId}/facilitator`, { method: 'POST', body: { tableId: tid } }); toast('Facilitatore aggiornato'); await refresh(); } catch (e) { toast('Errore: ' + (e.data?.error || e.message)); } };
+    p.querySelectorAll('button[data-facclear]').forEach(b => b.onclick = () => { const tid = Number(b.dataset.facclear); const prev = S.guests.find(g => g.facilitatorTableId === tid); if (prev && confirm(`Rimuovere ${prev.firstName} ${prev.lastName} come facilitatore del tavolo ${tid}?`)) setFac(prev.id, null); });
+    p.querySelectorAll('input[data-facq]').forEach(inp => {
+      const tid = Number(inp.dataset.facq); const box = p.querySelector(`[data-facsugg="${tid}"]`);
+      const show = () => {
+        const q = inp.value.trim().toLowerCase();
+        if (q.length < 2) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+        const hits = S.guests.filter(g => `${g.firstName} ${g.lastName} ${g.lastName} ${g.firstName} ${g.company}`.toLowerCase().includes(q)).slice(0, 8);
+        box.innerHTML = hits.length ? hits.map(g => `<div class="sugg-item" data-g="${g.id}"><b>${esc(g.lastName)}</b> ${esc(g.firstName)} <small class="muted">${esc(g.company)}${g.facilitatorTableId != null ? ` · già facilitatore tavolo ${g.facilitatorTableId}` : ''}</small></div>`).join('') : '<div class="sugg-item muted">Nessun risultato</div>';
+        box.classList.remove('hidden');
+        box.querySelectorAll('.sugg-item[data-g]').forEach(it => it.onmousedown = e => { e.preventDefault(); setFac(Number(it.dataset.g), tid); });
+      };
+      inp.oninput = show; inp.onfocus = show; inp.onblur = () => setTimeout(() => box.classList.add('hidden'), 150);
+      inp.onkeydown = e => { if (e.key === 'Enter') { const first = box.querySelector('.sugg-item[data-g]'); if (first) setFac(Number(first.dataset.g), tid); } if (e.key === 'Escape') box.classList.add('hidden'); };
     });
     p.querySelectorAll('button[data-copy]').forEach(b => b.onclick = () => copy(inviteUrl(b.dataset.copy)));
     $('#copyAll').onclick = () => {
