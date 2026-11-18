@@ -39,7 +39,7 @@
   function render() {
     if (!S) return renderLogin();
     const st = S.stats;
-    $('#sub').textContent = `${st.seated} seduti · ${st.done} quiz fatti · ${st.consented} accessi · ${st.guests} invitati (${st.genders.M} M, ${st.genders.F} F${st.genders.nd ? `, ${st.genders.nd} n.d.` : ''})` + (st.waiting ? ` · ⚠️ ${st.waiting} in attesa di posto` : '');
+    $('#sub').innerHTML = ''; $('#sub').style.fontSize = '15px'; $('#sub').textContent = `${st.seated} seduti · ${st.done} quiz fatti · ${st.consented} accessi · ${st.guests} invitati (${st.genders.M} M, ${st.genders.F} F${st.genders.nd ? `, ${st.genders.nd} n.d.` : ''})` + (st.waiting ? ` · ⚠️ ${st.waiting} in attesa di posto` : '');
     $('#topActions').innerHTML = `
       <label class="muted" style="font-size:13px"><input type="checkbox" id="locked" ${S.settings.locked === '1' ? 'checked' : ''}> Iscrizioni chiuse</label>
       <label class="muted" style="font-size:13px"><input type="checkbox" id="reveal" ${S.settings.reveal !== '0' ? 'checked' : ''}> Mostra tavolo subito</label>

@@ -68,7 +68,6 @@
 
   // ------------------------------------------------------------ schermate
   function render() {
-    $('#foot').textContent = config.eventName || '';
     const g = state.guest;
     if (!g) return renderSearch();
     if (g.done) return renderResult(g, false);
@@ -234,7 +233,6 @@
     try {
       const [cfg, me] = await Promise.all([api('/api/config'), api('/api/me?locale=' + lang)]);
       config = cfg; if (!localStorage.getItem('lang') && cfg.locale) lang = cfg.locale;
-      $('#brand').textContent = cfg.eventName || 'Partner Meeting';
       state.guest = me.guest;
       const token = new URLSearchParams(location.search).get('invite');
       if (token) {
