@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
-import { makeAdminToken, verifyAdminToken, timingSafeEqual, randomToken } from './auth';
+import { makeAdminToken, verifyAdminToken, timingSafeEqual, randomToken, signValue, verifyValue } from './auth';
 import { DIMENSIONS, pickQuestionIds, serializeQuestions, scoreAnswers, archetypeKey, describeArchetype, type Locale } from './quiz';
 import { rankTables, rebalance, genderShares, DEFAULT_WEIGHTS, type TableState, type Weights } from './assign';
 
@@ -93,6 +93,8 @@ function guestView(g: GuestRow, tables: Map<number, TableRow>, settings: Record<
     table: done && reveal && table ? { id: table.id, name: table.name } : null,
     waitingTable: done && !g.table_id,     // quiz fatto ma nessun posto libero: l'admin interviene
     revealLater: done && !reveal,
+    assignedAt: g.assigned_at ? g.assigned_at.replace(' ', 'T') + (g.assigned_at.endsWith('Z') ? '' : 'Z') : null,
+    now: new Date().toISOString(),
   };
 }
 
@@ -113,6 +115,17 @@ app.get('/api/guests/search', async c => {
      ORDER BY last_name, first_name LIMIT 12`).bind(like).all();
   return c.json(results.map((r: any) => ({ id: r.id, firstName: r.first_name, lastName: r.last_name, company: r.company, done: !!r.done })));
 });
+
+const DEVICE_COOKIE = 'device_done';
+/** Marca il telefono: ha già completato il quiz per questo ospite (cookie firmato, 60 giorni). */
+async function markDeviceDone(c: Context<App>, guestId: number) {
+  setCookie(c, DEVICE_COOKIE, await signValue(c.env.SESSION_SECRET || 'dev', String(guestId)), cookieOpts(c, 60 * 60 * 24 * 60));
+}
+/** Id dell'ospite per cui questo telefono ha già giocato, se il cookie è valido. */
+async function deviceDoneGuestId(c: Context<App>): Promise<number | null> {
+  const v = await verifyValue(c.env.SESSION_SECRET || 'dev', getCookie(c, DEVICE_COOKIE));
+  return v && /^\d+$/.test(v) ? Number(v) : null;
+}
 
 async function guestFromCookie(c: Context<App>): Promise<GuestRow | null> {
   const tok = getCookie(c, 'guest_token');
@@ -155,6 +168,15 @@ app.post('/api/claim', async c => {
   }
   if (!g) return c.json({ error: 'not_found' }, 404);
   const id = g.id;
+  // Anti-scherzo: un telefono che ha già completato il quiz per qualcuno non può giocare per un altro nome.
+  const lockedTo = await deviceDoneGuestId(c);
+  if (lockedTo != null && lockedTo !== id) {
+    const other = await db.prepare('SELECT id, first_name, last_name, vector FROM guests WHERE id = ?').bind(lockedTo).first<{ id: number; first_name: string; last_name: string; vector: string | null }>();
+    if (other && other.vector) {
+      await log(db, 'device_blocked', id, { deviceGuest: lockedTo });
+      return c.json({ error: 'device_used', by: { firstName: other.first_name, lastName: other.last_name } }, 409);
+    }
+  }
   if (!g.device_token) {
     // Primo accesso: creiamo il token. L'UPDATE condizionale evita che due telefoni creino due token.
     const tok = randomToken();
@@ -166,6 +188,7 @@ app.post('/api/claim', async c => {
     await log(db, 'reclaim', id, { ua: c.req.header('user-agent') });
   }
   setCookie(c, 'guest_token', g.device_token!, cookieOpts(c, 60 * 60 * 24 * 30));
+  if (g.vector) await markDeviceDone(c, g.id);
   const [s, t] = await Promise.all([getSettings(db), db.prepare('SELECT * FROM tables').all<TableRow>()]);
   return c.json({ guest: guestView(g, new Map(t.results.map(r => [r.id, r])), s, locale) });
 });
@@ -200,7 +223,10 @@ app.post('/api/quiz/submit', async c => {
   const settings = await getSettings(db);
   const tablesAll = await db.prepare('SELECT * FROM tables').all<TableRow>();
   const tableMap = new Map(tablesAll.results.map(r => [r.id, r]));
-  const respond = (row: GuestRow, status = 200) => c.json({ guest: guestView(row, tableMap, settings, locale) }, status as any);
+  const respond = async (row: GuestRow, status = 200) => {
+    if (row.vector) await markDeviceDone(c, row.id);
+    return c.json({ guest: guestView(row, tableMap, settings, locale) }, status as any);
+  };
 
   if (g.vector) return respond(g); // idempotente: doppio tap, refresh, ecc.
   if (settings.locked === '1') return c.json({ error: 'locked' }, 423);
