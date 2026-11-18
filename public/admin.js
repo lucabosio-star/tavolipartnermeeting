@@ -72,10 +72,23 @@
         const nF = list.filter(g => g.gender === 'F').length, nM = list.filter(g => g.gender === 'M').length;
         return `<div class="tcard"><h3><span>${t.id} · ${esc(t.name)}</span><span class="cap ${full ? 'full' : ''}" title="${nM} uomini, ${nF} donne">${list.length}/${t.capacity} <small>(${nM}M ${nF}F)</small></span></h3>
           ${t.seed ? `<div class="muted" style="font-size:11px;margin-bottom:4px">Profilo: ${dimLbl(t.seed)}</div>` : '<div class="muted" style="font-size:11px;margin-bottom:4px">Facilitatore non ancora giocato</div>'}
-          <ul>${list.map(g => `<li class="${g.facilitatorTableId === t.id ? 'fac' : ''}" title="${esc(g.archetype || '')}"><span>${g.facilitatorTableId === t.id ? '★ ' : ''}${esc(g.firstName)} ${esc(g.lastName)}</span><span class="co">${esc(g.department || g.company)}</span></li>`).join('') || '<li class="muted">vuoto</li>'}</ul></div>`;
+          <ul>${list.map(g => `<li class="${g.facilitatorTableId === t.id ? 'fac' : ''}" title="${esc(g.archetype || '')}">
+              <span class="person" data-person="${g.id}">${g.facilitatorTableId === t.id ? '★ ' : ''}${esc(g.firstName)} ${esc(g.lastName)}</span>
+              <span class="co">${esc(g.department || g.company)}</span>
+              <span class="actions hidden" data-actions="${g.id}">
+                <select data-move="${g.id}" title="Sposta a un altro tavolo">${tableOptions(g.tableId)}</select>
+                <button class="btn small secondary" data-reset="${g.id}" title="Azzera quiz e tavolo: potrà rifare il test">↺</button>
+              </span></li>`).join('') || '<li class="muted">vuoto</li>'}</ul></div>`;
       }).join('')}</div>
-      ${!S.tables.length ? '<p class="muted">Nessun tavolo: vai in Setup.</p>' : ''}`;
-    $('#panel').querySelectorAll('select[data-move]').forEach(s => s.onchange = () => move(Number(s.dataset.move), s.value ? Number(s.value) : null));
+      ${!S.tables.length ? '<p class="muted">Nessun tavolo: vai in Setup.</p>' : '<p class="muted">Tocca un nome per spostarlo a un altro tavolo o azzerarne il quiz (↺): la persona potrà rifare il test.</p>'}`;
+    const p = $('#panel');
+    p.querySelectorAll('select[data-move]').forEach(s => s.onchange = () => move(Number(s.dataset.move), s.value ? Number(s.value) : null));
+    p.querySelectorAll('.person').forEach(el => el.onclick = () => { const a = p.querySelector(`[data-actions="${el.dataset.person}"]`); const open = !a.classList.contains('hidden'); p.querySelectorAll('.actions').forEach(x => x.classList.add('hidden')); if (!open) a.classList.remove('hidden'); });
+    p.querySelectorAll('button[data-reset]').forEach(b => b.onclick = async () => {
+      const g = S.guests.find(x => x.id === Number(b.dataset.reset));
+      if (!confirm(`Azzerare quiz e tavolo di ${g.firstName} ${g.lastName}? Potrà rifare il test.`)) return;
+      await api(`/api/admin/guests/${g.id}/reset`, { method: 'POST' }); toast('Azzerato: può rifare il test'); await refresh();
+    });
   }
 
   async function move(id, tableId) {
