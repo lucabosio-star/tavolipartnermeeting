@@ -40,8 +40,12 @@ async function weightsFrom(db: D1Database, settings: Record<string, string>): Pr
     maxSameGroup: Math.max(1, Number(settings.max_same_group) || 2),
     gender: settings.gender_balance === '0' ? 0 : DEFAULT_WEIGHTS.gender,
     genderShare: genderShares(results.map(r => r.gender)),
+    minExternal: Math.max(0, Number(settings.min_external) || 0),
+    buddies: settings.buddies !== '0',
   };
 }
+/** Interno = Danfoss (il gruppo calcolato all'import inizia con "danfoss"). */
+const isInternal = (groupKey: string) => groupKey.startsWith('danfoss');
 
 const normGender = (v: unknown): string => {
   const s = String(v ?? '').trim().toLowerCase();
@@ -73,7 +77,7 @@ async function loadTableStates(db: D1Database): Promise<{ rows: TableRow[]; stat
   const states: TableState[] = rows.map(r => ({ id: r.id, capacity: r.capacity, seed: parseJson<number[] | null>(r.seed_vector, null), occupants: [] }));
   const byId = new Map(states.map(s => [s.id, s]));
   for (const o of g.results as unknown as { table_id: number; vector: string | null; group_key: string; gender: string }[]) {
-    byId.get(o.table_id)?.occupants.push({ vector: parseJson<number[] | null>(o.vector, null), group: o.group_key, gender: o.gender });
+    byId.get(o.table_id)?.occupants.push({ vector: parseJson<number[] | null>(o.vector, null), group: o.group_key, gender: o.gender, internal: isInternal(o.group_key) });
   }
   return { rows, states };
 }
@@ -213,6 +217,43 @@ app.post('/api/quiz/start', async c => {
   return c.json({ questions: serializeQuestions(ids, locale) });
 });
 
+/**
+ * Ricongiungimento compagni di tavolo (rete di sicurezza). Due colleghi che inviano il quiz nello stesso istante possono
+ * aprire due coppie separate: qui chi è rimasto solo raggiunge il collega solo (o, se è l'ultimo
+ * dell'azienda, la coppia più piccola). Si sposta solo la persona che sta inviando ora (selfId),
+ * che non ha ancora visto il tavolo. Chi ha il tavolo con numero più basso aspetta un attimo prima
+ * di muoversi, così due colleghi non si scambiano il posto a vicenda.
+ */
+async function repairBuddies(db: D1Database, selfId: number, groupKey: string, w: Weights) {
+  if (!w.buddies || !groupKey || isInternal(groupKey)) return;
+  const tryMove = async (id: number, from: number, to: number) => {
+    const r = await db.prepare(`UPDATE guests SET table_id=?1, assigned_at=datetime('now'), assigned_by='buddy'
+      WHERE id=?2 AND table_id=?3 AND facilitator_table_id IS NULL
+        AND (SELECT COUNT(*) FROM guests WHERE table_id=?1) < (SELECT capacity FROM tables WHERE id=?1)`).bind(to, id, from).run();
+    if (r.meta.changes === 1) await log(db, 'buddy_move', id, { from, to });
+    return r.meta.changes === 1;
+  };
+  for (let iter = 0; iter < 4; iter++) {
+    const members = (await db.prepare('SELECT id, table_id FROM guests WHERE group_key = ? AND table_id IS NOT NULL').bind(groupKey).all<{ id: number; table_id: number }>()).results;
+    const me = members.find(m => m.id === selfId);
+    if (!me) return;
+    const byTable = new Map<number, number[]>();
+    for (const m of members) byTable.set(m.table_id, [...(byTable.get(m.table_id) || []), m.id]);
+    if ((byTable.get(me.table_id)?.length ?? 0) >= 2) return;            // non sono solo: tutto bene
+    const otherAlone = [...byTable.entries()].filter(([tid, ids]) => tid !== me.table_id && ids.length === 1).map(([tid]) => tid).sort((a, b) => a - b);
+    let moved = false;
+    if (otherAlone.length) {
+      for (const tid of otherAlone) if (await tryMove(selfId, me.table_id, tid)) { moved = true; break; }
+    } else {
+      const unassigned = await db.prepare('SELECT COUNT(*) AS n FROM guests WHERE group_key = ? AND table_id IS NULL').bind(groupKey).first<{ n: number }>();
+      if ((unassigned?.n ?? 0) > 0) return;                                 // arriverà un collega: lo aspetto al mio tavolo
+      const pairs = [...byTable.entries()].filter(([tid]) => tid !== me.table_id).sort((a, b) => a[1].length - b[1].length || a[0] - b[0]);
+      for (const [tid] of pairs) if (await tryMove(selfId, me.table_id, tid)) { moved = true; break; }
+    }
+    if (!moved) return;
+  }
+}
+
 /** Riceve le risposte, calcola l'archetipo e assegna il tavolo in modo atomico. */
 app.post('/api/quiz/submit', async c => {
   const db = c.env.DB;
@@ -228,7 +269,14 @@ app.post('/api/quiz/submit', async c => {
     return c.json({ guest: guestView(row, tableMap, settings, locale) }, status as any);
   };
 
-  if (g.vector) return respond(g); // idempotente: doppio tap, refresh, ecc.
+  if (g.vector) { // idempotente: doppio tap, refresh, ecc.
+    const ageMs = g.assigned_at ? Date.now() - new Date(g.assigned_at.replace(' ', 'T') + 'Z').getTime() : Infinity;
+    if (g.table_id && !isInternal(g.group_key) && ageMs < 15000) {
+      await repairBuddies(db, g.id, g.group_key, await weightsFrom(db, settings));
+      return respond((await db.prepare('SELECT * FROM guests WHERE id = ?').bind(g.id).first<GuestRow>())!);
+    }
+    return respond(g);
+  }
   if (settings.locked === '1') return c.json({ error: 'locked' }, 423);
   const ids = parseJson<string[] | null>(g.quiz_question_ids, null);
   if (!ids) return c.json({ error: 'quiz_not_started' }, 400);
@@ -254,18 +302,31 @@ app.post('/api/quiz/submit', async c => {
 
   // --- Ospite normale: tenta i tavoli in ordine di affinità. L'UPDATE è atomico:
   //     assegna solo se la persona è ancora libera E il tavolo ha ancora posto.
-  for (let attempt = 0; attempt < 6; attempt++) {
+  //     Per gli esterni l'UPDATE pretende anche che il numero di colleghi già seduti non sia cambiato
+  //     da quando ho letto lo stato: se un collega si è seduto nel frattempo, rileggo e decido di nuovo
+  //     (così lo raggiungo invece di aprire una coppia separata). Nessun lock, solo concorrenza ottimistica.
+  const buddyMode = !isInternal(g.group_key) && !!g.group_key && w.buddies;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, 30 + Math.random() * 120));
     const { states } = await loadTableStates(db);
-    const ranked = rankTables(states, { vector, group: g.group_key, gender: g.gender }, w);
+    const internal = isInternal(g.group_key);
+    // Esterni ancora da assegnare per azienda (me escluso): serve a riservare i posti ai colleghi in arrivo.
+    const rem = await db.prepare(`SELECT group_key, COUNT(*) AS n FROM guests WHERE table_id IS NULL AND id <> ? AND group_key <> '' AND group_key NOT LIKE 'danfoss%' GROUP BY group_key`).bind(g.id).all<{ group_key: string; n: number }>();
+    w.remainingByGroup = Object.fromEntries(rem.results.map(r => [r.group_key, r.n]));
+    const remaining = internal ? undefined : (w.remainingByGroup[g.group_key] ?? 0);
+    const ranked = rankTables(states, { vector, group: g.group_key, gender: g.gender, internal, remaining }, w);
     if (!ranked.length) break;
-    for (const tid of ranked.slice(0, 3)) {
+    const seatedColleagues = buddyMode ? states.reduce((n, t) => n + t.occupants.filter(o => o.group === g.group_key).length, 0) : -1;
+    for (const tid of ranked.slice(0, buddyMode ? 1 : 3)) {
       const r = await db.prepare(
         `UPDATE guests SET answers=?1, vector=?2, archetype=?3, table_id=?4, assigned_at=datetime('now'), assigned_by='quiz'
          WHERE id=?5 AND table_id IS NULL AND vector IS NULL
-           AND (SELECT COUNT(*) FROM guests WHERE table_id=?4) < (SELECT capacity FROM tables WHERE id=?4)`)
-        .bind(ansJson, vecJson, arch, tid, g.id).run();
+           AND (SELECT COUNT(*) FROM guests WHERE table_id=?4) < (SELECT capacity FROM tables WHERE id=?4)
+           AND (?7 < 0 OR (SELECT COUNT(*) FROM guests WHERE group_key=?6 AND table_id IS NOT NULL AND id<>?5) = ?7)`)
+        .bind(ansJson, vecJson, arch, tid, g.id, g.group_key, seatedColleagues).run();
       if (r.meta.changes === 1) {
         await log(db, 'assign', g.id, { table: tid, by: 'quiz', attempt, vector });
+        if (!internal) await repairBuddies(db, g.id, g.group_key, w);
         return respond((await db.prepare('SELECT * FROM guests WHERE id = ?').bind(g.id).first<GuestRow>())!);
       }
       // 0 righe: o il tavolo si è riempito nel frattempo, o la persona è già stata assegnata altrove.
@@ -311,7 +372,7 @@ admin.get('/state', async c => {
     db.prepare('SELECT * FROM guests ORDER BY last_name, first_name').all<GuestRow>(),
   ]);
   const guests = g.results.map(x => ({
-    id: x.id, firstName: x.first_name, lastName: x.last_name, company: x.company, department: x.department, groupKey: x.group_key, gender: x.gender,
+    id: x.id, firstName: x.first_name, lastName: x.last_name, company: x.company, department: x.department, groupKey: x.group_key, gender: x.gender, internal: isInternal(x.group_key),
     facilitatorTableId: x.facilitator_table_id, consent: !!x.consent_at, started: !!x.quiz_question_ids, done: !!x.vector,
     vector: parseJson<number[] | null>(x.vector, null), archetype: x.archetype ? describeArchetype(x.archetype, 'it').name : null,
     tableId: x.table_id, assignedAt: x.assigned_at, assignedBy: x.assigned_by, locale: x.locale, inviteToken: x.invite_token,
@@ -333,6 +394,8 @@ admin.put('/settings', async c => {
     locked: v => (v === true || v === '1' || v === 1 ? '1' : '0'),
     reveal: v => (v === false || v === '0' || v === 0 ? '0' : '1'),
     gender_balance: v => (v === false || v === '0' || v === 0 ? '0' : '1'),
+    min_external: v => { const n = Number(v); return Number.isInteger(n) && n >= 0 && n <= 10 ? String(n) : null; },
+    buddies: v => (v === false || v === '0' || v === 0 ? '0' : '1'),
     max_same_group: v => { const n = Number(v); return Number.isInteger(n) && n >= 1 && n <= 20 ? String(n) : null; },
     default_capacity: v => { const n = Number(v); return Number.isInteger(n) && n >= 1 && n <= 50 ? String(n) : null; },
   };
@@ -567,9 +630,9 @@ admin.post('/rebalance', async c => {
   const g = await db.prepare('SELECT * FROM guests WHERE vector IS NOT NULL').all<GuestRow>();
   const tables = t.results.map(r => ({ id: r.id, capacity: r.capacity, seed: parseJson<number[] | null>(r.seed_vector, null) }));
   const fixed = g.results.filter(x => x.facilitator_table_id != null && x.table_id != null)
-    .map(x => ({ guestId: x.id, tableId: x.table_id!, vector: parseJson<number[] | null>(x.vector, null), group: x.group_key, gender: x.gender }));
+    .map(x => ({ guestId: x.id, tableId: x.table_id!, vector: parseJson<number[] | null>(x.vector, null), group: x.group_key, gender: x.gender, internal: isInternal(x.group_key) }));
   const movable = g.results.filter(x => !(x.facilitator_table_id != null && x.table_id != null))
-    .map(x => ({ guestId: x.id, vector: parseJson<number[]>(x.vector, []), group: x.group_key, gender: x.gender }));
+    .map(x => ({ guestId: x.id, vector: parseJson<number[]>(x.vector, []), group: x.group_key, gender: x.gender, internal: isInternal(x.group_key) }));
   const plan = rebalance(tables, fixed, movable, await weightsFrom(db, s));
   const stmts = movable.map(m => plan.has(m.guestId)
     ? db.prepare("UPDATE guests SET table_id=?, assigned_at=datetime('now'), assigned_by='rebalance' WHERE id=?").bind(plan.get(m.guestId), m.guestId)
@@ -595,6 +658,18 @@ admin.get('/export.csv', async c => {
 admin.get('/events', async c => {
   const { results } = await c.env.DB.prepare('SELECT * FROM events ORDER BY id DESC LIMIT 200').all();
   return c.json(results);
+});
+
+/** Riazzera quiz e tavolo di TUTTI: lista invitati, facilitatori e tavoli restano. Tutti potranno rigiocare. */
+admin.post('/reset-all', async c => {
+  const b = await c.req.json<{ confirm?: string }>().catch(() => ({} as any));
+  if (b.confirm !== 'AZZERA') return c.json({ error: 'confirmation_required' }, 400);
+  await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE guests SET quiz_question_ids=NULL, answers=NULL, vector=NULL, archetype=NULL, table_id=NULL, assigned_at=NULL, assigned_by=NULL`),
+    c.env.DB.prepare('UPDATE tables SET seed_vector = NULL'),
+  ]);
+  await log(c.env.DB, 'admin_reset_all', null);
+  return c.json({ ok: true });
 });
 
 /** Cancella tutti i dati personali (da usare dopo l'evento). */
