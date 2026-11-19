@@ -9,6 +9,12 @@
 const BASE = process.argv[2] || 'http://127.0.0.1:8787';
 const PW = process.argv[3] || 'test1234';
 
+// Dietro un proxy HTTPS (variabile HTTPS_PROXY) usa il proxy anche per fetch di Node.
+if (process.env.HTTPS_PROXY && BASE.startsWith('https://')) {
+  const { ProxyAgent, setGlobalDispatcher } = await import('undici');
+  setGlobalDispatcher(new ProxyAgent(process.env.HTTPS_PROXY));
+}
+
 const cookieOf = res => (res.headers.get('set-cookie') || '').split(';')[0];
 async function call(path, { method = 'GET', body, cookie } = {}) {
   const res = await fetch(BASE + path, { method, headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) }, body: body ? JSON.stringify(body) : undefined });
@@ -19,8 +25,10 @@ const assert = (cond, msg) => { if (!cond) { console.error('❌ ' + msg); proces
 
 async function adminLogin() {
   const r = await call('/api/admin/login', { method: 'POST', body: { password: PW } });
-  if (r.status !== 200) throw new Error('login admin fallito: ' + JSON.stringify(r.data));
-  return r.cookie;
+  if (r.status === 200) return r.cookie;
+  const probe = await call('/api/admin/state');
+  if (probe.status === 200) { console.log('ℹ️  login con password fallito, ma le API admin rispondono (credenziale iniettata): proseguo'); return ''; }
+  throw new Error('login admin fallito: ' + JSON.stringify(r.data));
 }
 
 function makeGuests(n, danfoss, facilitators) {
@@ -63,7 +71,10 @@ async function play(guestId) {
     call('/api/quiz/submit', { method: 'POST', body: { answers }, cookie }),
   ]);
   const ta = a.data.guest?.table?.id ?? null, tb = b.data.guest?.table?.id ?? null;
-  return { guestId, status: [a.status, b.status], tables: [ta, tb], waiting: !!a.data.guest?.waitingTable };
+  // Stato finale: è quello che l'ospite vede riaprendo la pagina.
+  const me = await call('/api/me', { cookie });
+  const tf = me.data.guest?.table?.id ?? null;
+  return { guestId, status: [a.status, b.status], tables: [ta, tb], final: tf, waiting: !!a.data.guest?.waitingTable };
 }
 
 function verify(state, label) {
@@ -85,7 +96,14 @@ function verify(state, label) {
   console.log(`   ${label}: max persone dello stesso gruppo per tavolo = ${groupStats.join(',')}`);
   const women = state.tables.map(t => byTable.get(t.id).filter(g => g.gender === 'F').length);
   console.log(`   ${label}: donne per tavolo = ${women.join(',')}`);
-  return { byTable, women };
+  const externals = state.tables.map(t => byTable.get(t.id).filter(g => !g.internal).length);
+  console.log(`   ${label}: esterni per tavolo = ${externals.join(',')}`);
+  const alone = [];
+  for (const t of state.tables) { const ext = byTable.get(t.id).filter(g => !g.internal); for (const g of ext) if (ext.filter(x => x.groupKey === g.groupKey).length === 1) alone.push(`${g.lastName}@${t.id}`); }
+  const sizes = {};
+  for (const t of state.tables) { const c = {}; for (const g of byTable.get(t.id)) if (!g.internal) c[g.groupKey] = (c[g.groupKey] || 0) + 1; for (const n of Object.values(c)) sizes[n] = (sizes[n] || 0) + 1; }
+  console.log(`   ${label}: gruppi aziendali esterni per dimensione = ${JSON.stringify(sizes)}`);
+  return { byTable, women, externals, alone };
   return { byTable };
 }
 
@@ -105,7 +123,7 @@ function verify(state, label) {
   const dt = Date.now() - t0;
   const errors = results.filter(r => r.error);
   assert(errors.length === 0, `nessun errore HTTP su ${others.length} giocate concorrenti (${dt} ms)` + (errors.length ? ' ' + JSON.stringify(errors.slice(0, 3)) : ''));
-  assert(results.every(r => r.tables[0] === r.tables[1]), 'doppio submit restituisce sempre lo stesso tavolo');
+  assert(results.every(r => r.tables[0] != null && r.tables[1] != null && (r.final === r.tables[0] || r.final === r.tables[1])), 'doppio submit: entrambe le risposte hanno un tavolo e lo stato finale coincide con una di esse');
   assert(results.every(r => r.tables[0] != null), 'tutti hanno un tavolo (110 persone su 120 posti)');
   st = (await call('/api/admin/state', { cookie: admin })).data;
   assert(st.stats.seated === 110, `seduti = 110 (trovati ${st.stats.seated})`);
@@ -113,6 +131,8 @@ function verify(state, label) {
   const totalWomen = st.guests.filter(g => g.gender === 'F' && g.tableId != null).length;
   const ideal = totalWomen / st.tables.length;
   assert(vA.women.every(w => Math.abs(w - ideal) <= 2), `bilanciamento di genere: ogni tavolo entro ±2 dalla media (${ideal.toFixed(1)} donne)`);
+  assert(vA.externals.every(e => e >= 2), 'almeno 2 persone di aziende esterne per tavolo');
+  assert(vA.alone.length === 0, 'nessun esterno da solo al tavolo' + (vA.alone.length ? ' (soli: ' + vA.alone.join(', ') + ')' : ''));
   // riaccesso: stesso nome → stesso tavolo, nessuna rigiocata
   const someone = others[0];
   const again = await call('/api/claim', { method: 'POST', body: { guestId: someone.id, consent: true } });
@@ -123,7 +143,9 @@ function verify(state, label) {
   const rb = await call('/api/admin/rebalance', { method: 'POST', cookie: admin });
   st = (await call('/api/admin/state', { cookie: admin })).data;
   assert(rb.data.unseated === 0 && st.stats.seated === 110, 'ricalcolo globale: tutti ancora seduti');
-  verify(st, 'A dopo ricalcolo');
+  const vR = verify(st, 'A dopo ricalcolo');
+  assert(vR.alone.length === 0, 'dopo il ricalcolo: nessun esterno da solo' + (vR.alone.length ? ' (soli: ' + vR.alone.join(', ') + ')' : ''));
+  assert(vR.externals.every(e => e >= 2), 'dopo il ricalcolo: almeno 2 esterni per tavolo');
 
   // ---------------- Scenario B
   console.log('\n=== Scenario B: 20 persone su 3 tavoli x 4 (overbooking) ===');

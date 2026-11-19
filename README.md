@@ -54,6 +54,7 @@ cp .dev.vars.example .dev.vars      # imposta password e secret
 npm run db:migrate:local
 npm run dev                          # http://127.0.0.1:8787
 npm run loadtest                     # in un altro terminale: ATTENZIONE, azzera i dati locali
+# Nota: il server locale (Miniflare) può rispondere 503 con ~200 richieste simultanee; non succede su Cloudflare.
 ```
 
 ## Flusso operativo per l'evento
@@ -86,7 +87,13 @@ Ogni tavolo con posti liberi riceve un costo; vince il più basso:
 - **affinità**: distanza dal profilo del tavolo (il facilitatore, altrimenti la media degli occupanti);
 - **stessa azienda / dipartimento**: penalità crescente, molto forte oltre la soglia (default 2 per tavolo);
 - **genere**: penalità se al tavolo ci sarebbero più persone di quel genere di quante ne prevede la quota globale,
-  così la minoranza viene distribuita su tutti i tavoli (disattivabile in Setup → Regole);
+  così la minoranza viene distribuita su tutti i tavoli (disattivabile nella tab Regole);
+- **almeno N esterni per tavolo** (default 2): i posti necessari a raggiungere il minimo restano riservati alle aziende
+  esterne, un Danfoss non può occuparli; gli esterni sono attratti dai tavoli sotto il minimo;
+- **nessun esterno da solo**: i colleghi della stessa azienda esterna si siedono a coppie; chi resterebbe spaiato forma un
+  trio (3 = trio, 5 = 2+3, 7 = 2+2+3). Il posto accanto a un esterno ancora solo resta riservato al collega in arrivo.
+  Online la decisione è protetta da un controllo ottimistico (l'assegnazione fallisce e viene rifatta se un collega si è
+  seduto nel frattempo) più un ricongiungimento di sicurezza; il ricalcolo globale la garantisce sempre;
 - **riempimento**: leggera preferenza per i tavoli meno pieni.
 
 ## Il quiz

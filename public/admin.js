@@ -50,10 +50,10 @@
     $('#locked').onchange = e => saveSettings({ locked: e.target.checked });
     $('#reveal').onchange = e => saveSettings({ reveal: e.target.checked });
     $('#logout').onclick = async () => { await api('/api/admin/logout', { method: 'POST' }); S = null; renderLogin(); };
-    const tabs = [['tavoli', 'Tavoli live'], ['invitati', 'Invitati'], ['setup', 'Setup'], ['log', 'Log']];
+    const tabs = [['tavoli', 'Tavoli live'], ['invitati', 'Invitati'], ['setup', 'Setup'], ['regole', 'Regole'], ['log', 'Log']];
     app.innerHTML = `<div class="tabs">${tabs.map(([k, l]) => `<button class="${tab === k ? 'on' : ''}" data-t="${k}">${l}</button>`).join('')}</div><div id="panel"></div>`;
     app.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { tab = b.dataset.t; localStorage.setItem('adminTab', tab); render(); });
-    ({ tavoli: renderTables, invitati: renderGuests, setup: renderSetup, log: renderLog })[tab]();
+    ({ tavoli: renderTables, invitati: renderGuests, setup: renderSetup, regole: renderRules, log: renderLog })[tab]();
   }
 
   async function saveSettings(patch) { try { S.settings = (await api('/api/admin/settings', { method: 'PUT', body: patch })).settings; toast('Salvato'); } catch (e) { toast('Errore: ' + e.message); } }
@@ -71,15 +71,17 @@
         const list = (byTable.get(t.id) || []).sort((a, b) => (b.facilitatorTableId === t.id) - (a.facilitatorTableId === t.id) || a.lastName.localeCompare(b.lastName));
         const full = list.length >= t.capacity;
         const nF = list.filter(g => g.gender === 'F').length, nM = list.filter(g => g.gender === 'M').length;
-        return `<div class="tcard"><h3><span>${t.id} · ${esc(t.name)}</span><span class="cap ${full ? 'full' : ''}" title="${nM} uomini, ${nF} donne">${list.length}/${t.capacity} <small>(${nM}M ${nF}F)</small></span></h3>
+        const nExt = list.filter(g => !g.internal).length, minExt = Number(S.settings.min_external) || 0;
+        const extWarn = minExt > 0 && list.length > 0 && nExt < minExt;
+        return `<div class="tcard"><h3><span>${t.id} · ${esc(t.name)}</span><span class="cap ${full ? 'full' : ''}" title="${nM} uomini, ${nF} donne, ${nExt} di aziende esterne">${list.length}/${t.capacity} <small>(${nM}M ${nF}F · <span class="${extWarn ? 'warn' : ''}">${nExt} est.</span>)</small></span></h3>
           ${t.seed ? `<div class="muted" style="font-size:11px;margin-bottom:4px">Profilo: ${dimLbl(t.seed)}</div>` : '<div class="muted" style="font-size:11px;margin-bottom:4px">Facilitatore non ancora giocato</div>'}
-          <ul>${list.map(g => `<li class="${g.facilitatorTableId === t.id ? 'fac' : ''}" title="${esc(g.archetype || '')}">
+          <ul>${list.map(g => { const alone = !g.internal && S.settings.buddies !== '0' && list.filter(x => x.groupKey === g.groupKey).length === 1; return `<li class="${g.facilitatorTableId === t.id ? 'fac' : ''}" title="${esc(g.archetype || '')}">
               <span class="person" data-person="${g.id}">${g.facilitatorTableId === t.id ? '★ ' : ''}${esc(g.firstName)} ${esc(g.lastName)}</span>
-              <span class="co">${esc(g.department || g.company)}</span>
+              <span class="co ${alone ? 'warn' : ''}" title="${alone ? 'Unico della sua azienda a questo tavolo' : ''}">${esc(g.department || g.company)}${alone ? ' · solo' : ''}</span>
               <span class="actions hidden" data-actions="${g.id}">
                 <select data-move="${g.id}" title="Sposta a un altro tavolo">${tableOptions(g.tableId)}</select>
                 <button class="btn small secondary" data-reset="${g.id}" title="Azzera quiz e tavolo: potrà rifare il test">↺</button>
-              </span></li>`).join('') || '<li class="muted">vuoto</li>'}</ul></div>`;
+              </span></li>`; }).join('') || '<li class="muted">vuoto</li>'}</ul></div>`;
       }).join('')}</div>
       ${!S.tables.length ? '<p class="muted">Nessun tavolo: vai in Setup.</p>' : '<p class="muted">Tocca un nome per spostarlo a un altro tavolo o azzerarne il quiz (↺): la persona potrà rifare il test.</p>'}`;
     const p = $('#panel');
@@ -157,10 +159,8 @@
         <textarea id="csv" rows="6" placeholder="nome;cognome;azienda;dipartimento;genere;tavolo&#10;Mario;Rossi;Danfoss;Sales;M;1&#10;Anna;Bianchi;Partner Srl;;F;"></textarea><p></p>
         <div class="row"><button class="btn small" id="imp">Importa (aggiungi/aggiorna)</button><button class="btn small secondary" id="impR">Sostituisci tutta la lista</button></div></div>
 
-      <div class="card"><h2>3. Regole</h2>
-        <div class="row">Max persone dello stesso gruppo per tavolo prima della penalità forte: <input type="number" id="msg" min="1" max="20" value="${S.settings.max_same_group}" style="width:70px"> <button class="btn small" id="saveMsg">Salva</button></div>
-        <div class="row"><label><input type="checkbox" id="gb" ${S.settings.gender_balance !== '0' ? 'checked' : ''}> Bilanciamento di genere (distribuisce uomini e donne in proporzione su ogni tavolo)</label></div>
-        <div class="row"><button class="btn small secondary" id="rebal">Ricalcola tutte le assegnazioni</button><span class="muted">Facilitatori fissi, tutti gli altri ridistribuiti per affinità. Da usare prima della cena, non durante.</span></div></div>
+      <div class="card"><h2>3. Riazzera assegnazioni</h2>
+        <div class="row"><button class="btn small secondary" id="resetAll">Riazzera assegnazioni di tutti</button><span class="muted">Cancella quiz, archetipo e tavolo di tutti gli invitati: tutti potranno rifare il test. Lista invitati, facilitatori, link personali e tavoli restano. Utile dopo le prove, prima dell'evento.</span></div></div>
 
       <div class="card danger"><h2>Fine evento</h2><div class="row"><button class="btn small secondary" id="wipe">Cancella tutti i dati personali</button><span class="muted">Irreversibile. Restano solo i tavoli.</span></div></div>`;
     const p = $('#panel');
@@ -201,10 +201,32 @@
       catch (e) { toast(e.data?.error === 'replace_blocked_quiz_done' ? 'Impossibile sostituire: ci sono già quiz completati' : 'Errore: ' + (e.data?.error || e.message)); }
     };
     $('#imp').onclick = () => imp('merge'); $('#impR').onclick = () => imp('replace');
-    $('#saveMsg').onclick = () => saveSettings({ max_same_group: Number($('#msg').value) });
-    $('#gb').onchange = e => saveSettings({ gender_balance: e.target.checked });
-    $('#rebal').onclick = async () => { if (!confirm('Ricalcolare tutte le assegnazioni? Le persone vedranno il nuovo tavolo al prossimo accesso.')) return; const r = await api('/api/admin/rebalance', { method: 'POST' }); toast(`Riassegnati ${r.moved}` + (r.unseated ? `, senza posto ${r.unseated}` : '')); await refresh(); };
+    $('#resetAll').onclick = async () => { const c = prompt(`Riazzerare quiz e tavolo di tutti i ${S.stats.guests} invitati? Scrivi AZZERA per confermare`); if (c !== 'AZZERA') return; await api('/api/admin/reset-all', { method: 'POST', body: { confirm: c } }); toast('Assegnazioni azzerate: tutti possono rigiocare'); await refresh(); };
     $('#wipe').onclick = async () => { const c = prompt('Scrivi CANCELLA TUTTO per confermare'); if (c !== 'CANCELLA TUTTO') return; await api('/api/admin/wipe', { method: 'POST', body: { confirm: c } }); toast('Dati cancellati'); await refresh(); };
+  }
+
+  function renderRules() {
+    const ext = S.guests.filter(g => !g.internal).length, intl = S.guests.length - ext;
+    $('#panel').innerHTML = `
+      <div class="card"><h2>Regole di assegnazione</h2>
+        <p class="muted">L'affinità del quiz decide il tavolo; queste regole correggono la scelta. Si applicano a ogni nuova assegnazione e al ricalcolo globale. Invitati: ${intl} Danfoss, ${ext} di aziende esterne.</p>
+        <div class="row"><b>1.</b> Max persone dello stesso gruppo per tavolo: <input type="number" id="msg" min="1" max="20" value="${S.settings.max_same_group}" style="width:70px"> <button class="btn small" id="saveMsg">Salva</button></div>
+        <p class="muted">Vale per i dipartimenti Danfoss: oltre la soglia la penalità diventa molto forte. Per le aziende esterne vale invece la regola 3.</p>
+        <div class="row"><b>2.</b> Almeno <input type="number" id="minext" min="0" max="10" value="${S.settings.min_external ?? 2}" style="width:70px"> persone di aziende esterne per tavolo <button class="btn small" id="saveMinExt">Salva</button></div>
+        <p class="muted">I posti necessari a raggiungere il minimo restano riservati agli esterni: un Danfoss non può occuparli. Gli esterni vengono attratti dai tavoli ancora sotto il minimo. Con 0 la regola è spenta. Nei Tavoli live il conteggio "est." diventa rosso se un tavolo è sotto il minimo.</p>
+        <div class="row"><b>3.</b> <label><input type="checkbox" id="bud" ${S.settings.buddies !== '0' ? 'checked' : ''}> Nessun esterno da solo</label></div>
+        <p class="muted">I colleghi della stessa azienda esterna si siedono a coppie; chi resterebbe spaiato si unisce a una coppia e forma un trio (azienda di 3 = trio, di 5 = coppia + trio, di 7 = due coppie + trio). Il posto accanto a un esterno ancora solo resta riservato al collega. Nei Tavoli live un esterno senza colleghi al tavolo è evidenziato in rosso: se un collega non si presenta, usa il ricalcolo o spostalo a mano.</p>
+        <div class="row"><b>4.</b> <label><input type="checkbox" id="gb" ${S.settings.gender_balance !== '0' ? 'checked' : ''}> Bilanciamento di genere</label></div>
+        <p class="muted">Distribuisce uomini e donne su ogni tavolo in proporzione alla lista invitati, così la minoranza non si concentra.</p>
+      </div>
+      <div class="card"><h2>Ricalcolo</h2>
+        <div class="row"><button class="btn small secondary" id="rebal">Ricalcola tutte le assegnazioni</button><span class="muted">Facilitatori fissi, tutti gli altri ridistribuiti applicando affinità e regole. Da usare prima della cena, non durante.</span></div>
+      </div>`;
+    $('#saveMsg').onclick = () => saveSettings({ max_same_group: Number($('#msg').value) });
+    $('#saveMinExt').onclick = () => saveSettings({ min_external: Number($('#minext').value) });
+    $('#gb').onchange = e => saveSettings({ gender_balance: e.target.checked });
+    $('#bud').onchange = e => saveSettings({ buddies: e.target.checked });
+    $('#rebal').onclick = async () => { if (!confirm('Ricalcolare tutte le assegnazioni? Le persone vedranno il nuovo tavolo al prossimo accesso.')) return; const r = await api('/api/admin/rebalance', { method: 'POST' }); toast(`Riassegnati ${r.moved}` + (r.unseated ? `, senza posto ${r.unseated}` : '')); await refresh(); };
   }
 
   async function saveTables(tables) {

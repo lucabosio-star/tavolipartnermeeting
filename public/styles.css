@@ -108,6 +108,7 @@ footer { margin-top: auto; border-top: 1px solid var(--g3); padding-top: 14px; f
 .tcard h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; display: flex; justify-content: space-between; align-items: baseline; }
 .tcard .cap { color: var(--g1); font-weight: 400; font-size: 12px; }
 .tcard .cap.full { color: var(--red); font-weight: 600; }
+.tcard .warn { color: var(--red); font-weight: 600; }
 .tcard ul { list-style: none; padding: 0; margin: 0; }
 .tcard li { padding: 5px 0; border-top: 1px solid var(--g3); display: flex; justify-content: space-between; gap: 6px; flex-wrap: wrap; align-items: center; }
 .tcard .person { cursor: pointer; }
