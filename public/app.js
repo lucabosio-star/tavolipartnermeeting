@@ -2,7 +2,7 @@
 (() => {
   const I18N = {
     it: {
-      title: 'Trova il tuo tavolo', intro: 'Quattro domande, zero pensieri. Ti diciamo chi sei (più o meno) e dove ti siedi stasera.',
+      title: 'Trova il tuo tavolo', intro: 'Cinque domande, zero pensieri. Ti diciamo chi sei (più o meno) e dove ti siedi stasera.',
       search: 'Cerca il tuo nome…', noResults: 'Nessun nome trovato. Chiedi allo staff.', typeMore: 'Scrivi almeno due lettere',
       consentLabel: 'Ho letto l’informativa e acconsento al trattamento dei miei dati per l’assegnazione del tavolo.',
       termsTitle: 'Informativa privacy',
@@ -25,7 +25,7 @@
       regret: mmss => `Hai cambiato idea? Entro ${mmss} puoi chiedere allo staff di farti rifare il test.`,
     },
     fr: {
-      title: 'Trouve ta table', intro: 'Quatre questions, zéro prise de tête. On te dit qui tu es (à peu près) et où tu t’assois ce soir.',
+      title: 'Trouve ta table', intro: 'Cinq questions, zéro prise de tête. On te dit qui tu es (à peu près) et où tu t’assois ce soir.',
       search: 'Cherche ton nom…', noResults: 'Aucun nom trouvé. Demande au staff.', typeMore: 'Tape au moins deux lettres',
       consentLabel: 'J’ai lu la notice et j’accepte le traitement de mes données pour l’attribution de la table.',
       termsTitle: 'Notice de confidentialité',
