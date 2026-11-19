@@ -92,7 +92,7 @@ Ogni tavolo con posti liberi riceve un costo; vince il più basso:
 ## Il quiz
 
 5 tratti ispirati ai Big Five in chiave conviviale, ciascuno con 6 domande da 6 opzioni; ogni persona riceve
-2 domande casuali per tratto (10 clic), in ordine mescolato. Il risultato mostra per ogni tratto il polo,
+1 domanda casuale per tratto (5 clic), in ordine mescolato. Il risultato mostra per ogni tratto il polo,
 una frase di lettura e le risposte che l'hanno determinato.
 
 | Tratto | Polo − | Polo + | Cosa misura |

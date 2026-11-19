@@ -8,7 +8,7 @@
  *   social   – estroversione, dove ricarichi      (salotto ↔ festa)
  *   metodo   – bisogno di struttura               (pianificatore ↔ improvvisatore)
  *   bussola  – stile decisionale                  (testa ↔ pancia)
- * Ogni persona riceve QUESTIONS_PER_DIM domande casuali per tratto (10 in tutto), in ordine mescolato.
+ * Ogni persona riceve QUESTIONS_PER_DIM domande casuali per tratto (5 in tutto), in ordine mescolato.
  * Ogni domanda ha 6 opzioni dal polo "meno" al polo "più", con punteggi -2, -1, -1, +1, +1, +2.
  * Il punteggio di un tratto va quindi da -SCORE_MAX a +SCORE_MAX.
  */
@@ -19,7 +19,7 @@ export type L = Record<Locale, string>;
 export interface Option { emoji: string; text: L; score: number }
 export interface Question { id: string; dim: DimKey; text: L; options: Option[] }
 
-export const QUESTIONS_PER_DIM = 2;
+export const QUESTIONS_PER_DIM = 1;
 export const SCORE_MAX = 2 * QUESTIONS_PER_DIM;
 
 export const DIMENSIONS = [
@@ -363,7 +363,7 @@ const TRAIT_NEUTRAL: Record<DimKey, L> = {
 };
 
 export function traitLevel(score: number): 0 | 1 | 2 | 3 {
-  const strong = Math.ceil(SCORE_MAX * 0.6); // con SCORE_MAX = 4: forte da |3| in su
+  const strong = Math.max(2, Math.ceil(SCORE_MAX * 0.6)); // con SCORE_MAX = 2: forte a |2|, lieve a |1|
   if (score <= -strong) return 0;
   if (score < 0) return 1;
   if (score < strong) return 2;
