@@ -15,6 +15,7 @@
   const inviteUrl = tok => `${location.origin}/?invite=${tok}`;
   const copy = async txt => { try { await navigator.clipboard.writeText(txt); toast('Link copiato'); } catch { prompt('Copia il link:', txt); } };
   let S = null; let tab = localStorage.getItem('adminTab') || 'tavoli'; let filter = ''; let timer;
+  let sortKey = 'lastName', sortDir = 1;
 
   async function refresh(silent) {
     try { S = await api('/api/admin/state'); if (!silent) render(); else if (tab === 'tavoli') render(); } catch (e) { if (e.message !== 'unauthorized') toast('Errore: ' + e.message); }
@@ -104,11 +105,15 @@
 
   function renderGuests() {
     const f = filter.toLowerCase();
-    const list = S.guests.filter(g => !f || `${g.firstName} ${g.lastName} ${g.company} ${g.department}`.toLowerCase().includes(f));
+    const statusOf = g => g.done ? 3 : g.started ? 2 : g.consent ? 1 : 0;
+    const val = g => ({ lastName: g.lastName, firstName: g.firstName, company: g.company, department: g.department, gender: g.gender, status: statusOf(g), archetype: g.archetype || '', tableId: g.tableId ?? 999, facilitatorTableId: g.facilitatorTableId ?? 999 })[sortKey];
+    const cmp = (a, b) => { const x = val(a), y = val(b); const r = typeof x === 'number' ? x - y : String(x).localeCompare(String(y), 'it', { sensitivity: 'base' }); return (r || a.lastName.localeCompare(b.lastName, 'it')) * sortDir; };
+    const list = S.guests.filter(g => !f || `${g.firstName} ${g.lastName} ${g.company} ${g.department}`.toLowerCase().includes(f)).sort(cmp);
+    const th = (key, label) => `<th class="sortable ${sortKey === key ? 'on' : ''}" data-sort="${key}">${label}${sortKey === key ? (sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>`;
     $('#panel').innerHTML = `
       <div class="row"><input type="text" id="f" placeholder="Filtra…" value="${esc(filter)}">
         <input type="text" id="nf" placeholder="Nome"><input type="text" id="nl" placeholder="Cognome"><input type="text" id="nc" placeholder="Azienda"><input type="text" id="nd" placeholder="Dipartimento (Danfoss)"><select id="ng"><option value="">Genere</option><option value="M">M</option><option value="F">F</option></select><button class="btn small" id="add">+ Aggiungi</button></div>
-      <div class="card" style="padding:0;overflow:auto;max-height:70vh"><table class="list"><thead><tr><th>Cognome</th><th>Nome</th><th>Azienda</th><th>Dip.</th><th>Genere</th><th>Stato</th><th>Archetipo</th><th>Tavolo</th><th>Facilitatore di</th><th></th></tr></thead><tbody>
+      <div class="card" style="padding:0;overflow:auto;max-height:70vh"><table class="list"><thead><tr>${th('lastName', 'Cognome')}${th('firstName', 'Nome')}${th('company', 'Azienda')}${th('department', 'Dip.')}${th('gender', 'Genere')}${th('status', 'Stato')}${th('archetype', 'Archetipo')}${th('tableId', 'Tavolo')}${th('facilitatorTableId', 'Facilitatore di')}<th></th></tr></thead><tbody>
       ${list.map(g => `<tr>
         <td><b>${esc(g.lastName)}</b></td><td>${esc(g.firstName)}</td><td>${esc(g.company)}</td><td><input type="text" data-dept="${g.id}" value="${esc(g.department)}" style="width:110px;font-size:12px;padding:4px 6px;border-radius:8px"></td>
         <td><select data-gender="${g.id}"><option value="" ${!g.gender ? 'selected' : ''}>—</option><option value="M" ${g.gender === 'M' ? 'selected' : ''}>M</option><option value="F" ${g.gender === 'F' ? 'selected' : ''}>F</option></select></td>
@@ -120,6 +125,7 @@
       </tr>`).join('')}</tbody></table></div>
       <p class="muted">${list.length} persone. 🔗 copia il link personale (salta la ricerca del nome), ↺ azzera il quiz (la persona potrà rigiocare).</p>`;
     $('#f').oninput = e => { filter = e.target.value; renderGuests(); $('#f').focus(); $('#f').setSelectionRange(filter.length, filter.length); };
+    $('#panel').querySelectorAll('th.sortable').forEach(h => h.onclick = () => { const k = h.dataset.sort; if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = 1; } renderGuests(); });
     $('#add').onclick = async () => {
       try { await api('/api/admin/guests', { method: 'POST', body: { firstName: $('#nf').value, lastName: $('#nl').value, company: $('#nc').value, department: $('#nd').value, gender: $('#ng').value } }); toast('Aggiunto'); await refresh(); }
       catch (e) { toast('Errore: ' + (e.data?.error || e.message)); }

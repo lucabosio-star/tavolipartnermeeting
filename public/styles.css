@@ -122,6 +122,8 @@ footer { margin-top: auto; border-top: 1px solid var(--g3); padding-top: 14px; f
 table.list { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.list th, table.list td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--g3); vertical-align: middle; }
 table.list th { background: #fff; position: sticky; top: 0; font-weight: 600; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--g1); border-bottom: 2px solid var(--red); }
+table.list th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+table.list th.sortable:hover, table.list th.sortable.on { color: var(--ink); }
 table.list select, table.list input[type=number], table.list input[type=text] { font-size: 13px; padding: 5px 6px; width: auto; }
 .tabs { display: flex; gap: 0; margin-bottom: 18px; border-bottom: 1px solid var(--g3); flex-wrap: wrap; }
 .tabs button { border: 0; background: none; padding: 10px 16px; cursor: pointer; font-size: 14px; font-family: inherit; color: var(--g1); border-bottom: 2px solid transparent; margin-bottom: -1px; }
