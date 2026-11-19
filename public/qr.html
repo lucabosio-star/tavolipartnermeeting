@@ -11,13 +11,12 @@
   body.qr { background: #fff; }
   .qr .wrap { max-width: none; min-height: 100dvh; padding: 28px 40px; display: flex; flex-direction: column; }
   .qr main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; min-height: 0; }
-  .qr .code { position: relative; width: min(62vh, 80vw); aspect-ratio: 1; }
+  .qr .code { position: relative; width: min(66vh, 80vw); aspect-ratio: 1; }
   .qr .code svg { width: 100%; height: 100%; display: block; }
   .qr .code .mark { position: absolute; left: 50%; top: 50%; width: 17%; transform: translate(-50%, -50%); background: #fff; padding: 2%; border-radius: 10%; box-sizing: border-box; }
   .qr .cta { font-size: clamp(22px, 3.2vw, 40px); font-weight: 300; text-align: center; line-height: 1.2; margin: 0; }
   .qr .cta b { font-weight: 300; color: var(--red); }
-  .qr .url { font-size: clamp(14px, 1.6vw, 20px); color: var(--g1); text-align: center; margin: 0; letter-spacing: .02em; }
-  .qr footer { justify-content: space-between; }
+    .qr footer { justify-content: space-between; }
   @media print {
     .qr .wrap { padding: 10mm; }
     .qr .code { width: 150mm; }
@@ -34,7 +33,6 @@
   <main>
     <p class="cta">Inquadra e <b>trova il tuo tavolo</b><br><span style="font-size:.7em;color:var(--g1)">Scanne et trouve ta table</span></p>
     <div class="code" id="code"></div>
-    <p class="url" id="url"></p>
   </main>
   <footer><span>Torino · 2–3 dicembre 2026</span><span>Dieci domande, un tavolo, nessun ripensamento</span></footer>
 </div>
@@ -50,7 +48,6 @@
   document.getElementById('code').innerHTML =
     `<svg viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges" role="img" aria-label="QR code ${target}"><rect width="${size}" height="${size}" fill="#fff"/><path d="${path}" fill="#1a1a1a"/></svg>` +
     `<img class="mark" src="/img/danfoss-logo.png" alt="">`;
-  document.getElementById('url').textContent = target.replace(/^https?:\/\//, '').replace(/\/$/, '');
 </script>
 </body>
 </html>
