@@ -44,6 +44,7 @@
       <label class="muted" style="font-size:13px"><input type="checkbox" id="locked" ${S.settings.locked === '1' ? 'checked' : ''}> Iscrizioni chiuse</label>
       <label class="muted" style="font-size:13px"><input type="checkbox" id="reveal" ${S.settings.reveal !== '0' ? 'checked' : ''}> Mostra tavolo subito</label>
       <a class="btn small secondary" href="/board" target="_blank">Tabellone</a>
+      <a class="btn small secondary" href="/qr" target="_blank">QR</a>
       <a class="btn small secondary" href="/api/admin/export.csv">Export CSV</a>
       <button class="btn small secondary" id="logout">Esci</button>`;
     $('#locked').onchange = e => saveSettings({ locked: e.target.checked });

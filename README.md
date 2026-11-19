@@ -24,6 +24,7 @@ Stack: **Cloudflare Workers + D1 (SQLite) + Hono**, frontend statico senza build
 - `/` app ospite (è l'indirizzo da mettere nel QR code)
 - `/admin` pannello admin (password)
 - `/board` tabellone da proiettare (richiede login admin)
+- `/qr` QR code a tutto schermo che punta alla pagina del test, da proiettare o stampare
 
 ## Setup su Cloudflare (una volta sola)
 
